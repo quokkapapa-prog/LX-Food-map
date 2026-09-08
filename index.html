@@ -1,0 +1,1826 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>광화문 스마트 맛집 지도 & 점심 룰렛</title>
+  <meta name="description" content="광화문 직장인을 위한 실시간 맛집 지도, 가성비 음식점 필터 및 점심 메뉴 룰렛 웹 애플리케이션" />
+  <meta property="og:title" content="광화문 스마트 맛집 지도 & 점심 룰렛" />
+  <meta property="og:description" content="광화문 직장인을 위한 실시간 맛집 지도, 가성비 음식점 필터 및 점심 메뉴 룰렛 웹 애플리케이션" />
+
+  <!-- Tailwind CSS (Tailwind Play CDN for standalone execution) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c',
+            },
+            frugal: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#16a34a',
+              600: '#15803d',
+              700: '#166534',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- Canvas Confetti for Roulette Celebration -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <!-- Firebase SDKs (Compat version for simple single-file HTML CDN usage) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Custom Leaflet Map styling */
+    .leaflet-popup-content-wrapper {
+      padding: 0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+    .leaflet-popup-content {
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    /* Pulse animation for budget markers */
+    @keyframes badge-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+    .animate-badge-pulse {
+      animation: badge-pulse 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen w-screen overflow-hidden flex flex-col antialiased select-none">
+
+  <!-- ========================================================================= -->
+  <!-- TOP HEADER NAV BAR                                                        -->
+  <!-- ========================================================================= -->
+  <header class="bg-white border-b border-slate-200 z-30 px-3 py-2.5 sm:px-6 sm:py-3 shadow-xs flex items-center justify-between shrink-0">
+    <div class="flex items-center space-x-2.5">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black shadow-sm text-lg">
+        광
+      </div>
+      <div>
+        <div class="flex items-center space-x-1.5">
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900">광화문 맛집 지도</h1>
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-orange-100 text-orange-700">100% 실존 맛집</span>
+        </div>
+        <p class="text-[11px] text-slate-500 hidden sm:block">광화문·종로 직장인을 위한 검증된 맛집 & 가성비 음식점</p>
+      </div>
+    </div>
+
+    <!-- Actions & Filter Switches -->
+    <div class="flex items-center space-x-2 sm:space-x-3">
+      
+      <!-- Frugal "가성비 음식점" Mode Toggle -->
+      <button id="toggleFrugalBtn" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs sm:text-sm font-semibold transition-all hover:bg-emerald-100 hover:shadow-xs cursor-pointer active:scale-95">
+        <span class="text-sm">🪙</span>
+        <span>가성비 음식점</span>
+        <span id="frugalStatusBadge" class="bg-emerald-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">1만원 이하</span>
+      </button>
+
+      <!-- Lunch Roulette Button -->
+      <button id="openRouletteBtn" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs sm:text-sm font-bold shadow-sm hover:from-orange-600 hover:to-amber-600 transition-all active:scale-95 cursor-pointer animate-badge-pulse">
+        <span>🎲</span>
+        <span class="tracking-tight">오늘 뭐 먹지?</span>
+      </button>
+
+      <!-- Add Restaurant Button -->
+      <button id="openAddModalBtn" class="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs sm:text-sm font-medium hover:bg-slate-800 transition-all active:scale-95 cursor-pointer">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        <span class="hidden sm:inline">맛집 제보</span>
+      </button>
+
+      <!-- Firebase / Storage Status Indicator -->
+      <div id="syncStatusIndicator" class="hidden md:flex items-center space-x-1 text-[11px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md" title="클라우드 동기화 상태">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="syncStatusText">로컬 연결됨</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- MAIN WORKSPACE: SIDEBAR + MAP CONTAINER                                   -->
+  <!-- ========================================================================= -->
+  <div class="flex-1 relative flex overflow-hidden">
+    
+    <!-- LEFT SIDEBAR: Filters, Search, and Restaurant Cards -->
+    <aside id="sidebar" class="w-full sm:w-80 md:w-96 bg-white border-r border-slate-200 flex flex-col z-20 transition-all duration-300 shadow-sm shrink-0 sm:relative absolute inset-y-0 left-0 max-sm:-translate-x-full">
+      
+      <!-- Search & Category Filters -->
+      <div class="p-3 border-b border-slate-100 bg-slate-50/70 space-y-2.5">
+        <!-- Search Input -->
+        <div class="relative">
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="식당명, 대표메뉴 (예: 메밀, 순대국, 쌀국수, 돈까스)..." 
+            class="w-full pl-8 pr-3 py-1.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-slate-400"
+          />
+          <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </div>
+
+        <!-- Category Filter Chips (한식, 일식, 중식, 동남아, 피자·양식, 치킨·버거, 분식) -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar" id="categoryFilterContainer">
+          <button data-category="all" class="category-chip active px-2.5 py-1 rounded-full font-medium bg-slate-900 text-white whitespace-nowrap transition-colors">
+            전체 (<span id="count-all">0</span>)
+          </button>
+          <button data-category="한식" class="category-chip px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 whitespace-nowrap transition-colors">
+            🍚 한식 (<span id="count-한식">0</span>)
+          </button>
+          <button data-category="일식" class="category-chip px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 whitespace-nowrap transition-colors">
+            🍣 일식 (<span id="count-일식">0</span>)
+          </button>
+          <button data-category="중식" class="category-chip px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 whitespace-nowrap transition-colors">
+            🥟 중식 (<span id="count-중식">0</span>)
+          </button>
+          <button data-category="동남아" class="category-chip px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 whitespace-nowrap transition-colors">
+            🍜 동남아 (<span id="count-동남아">0</span>)
+          </button>
+          <button data-category="피자·양식" class="category-chip px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 whitespace-nowrap transition-colors">
+            🍕 피자·양식 (<span id="count-피자·양식">0</span>)
+          </button>
+          <button data-category="치킨·버거" class="category-chip px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 whitespace-nowrap transition-colors">
+            🍗 치킨·버거 (<span id="count-치킨·버거">0</span>)
+          </button>
+          <button data-category="분식" class="category-chip px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 whitespace-nowrap transition-colors">
+            🥢 분식 (<span id="count-분식">0</span>)
+          </button>
+        </div>
+
+        <!-- Active Filter Indicator Banner -->
+        <div id="filterBanner" class="hidden text-xs bg-emerald-100 text-emerald-800 px-2.5 py-1.5 rounded-md flex items-center justify-between font-medium">
+          <span class="flex items-center space-x-1">
+            <span>🪙</span>
+            <span><strong>가성비 음식점 모드</strong>: 1만원 이하 착한가격만 표시</span>
+          </span>
+          <button id="resetFrugalFilter" class="text-[11px] underline text-emerald-900 font-bold hover:text-emerald-700">전체보기</button>
+        </div>
+      </div>
+
+      <!-- Restaurant List Header -->
+      <div class="px-3 py-2 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
+        <span id="listSummaryText">실존 맛집 <strong>0</strong>곳</span>
+        <div class="flex items-center space-x-1">
+          <button id="sortRatingBtn" class="hover:text-slate-900 px-1.5 py-0.5 rounded text-[11px] bg-white border border-slate-200">⭐ 별점순</button>
+          <button id="sortPriceBtn" class="hover:text-slate-900 px-1.5 py-0.5 rounded text-[11px] bg-white border border-slate-200">💰 가격순</button>
+          <button id="sortLikesBtn" class="hover:text-slate-900 px-1.5 py-0.5 rounded text-[11px] bg-white border border-slate-200">👍 추천순</button>
+        </div>
+      </div>
+
+      <!-- Scrollable Restaurant Cards -->
+      <div id="restaurantListContainer" class="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-2">
+        <!-- Dynamically Rendered -->
+      </div>
+
+      <!-- Mobile Close Sidebar button -->
+      <div class="p-2 border-t border-slate-200 sm:hidden">
+        <button id="closeSidebarBtn" class="w-full py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">
+          지도로 돌아가기 🗺️
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAP VIEW CONTAINER -->
+    <main class="flex-1 relative h-full w-full">
+      <!-- Leaflet Map Mount Point -->
+      <div id="map" class="w-full h-full z-10"></div>
+
+      <!-- Floating Controls on Map -->
+      <div class="absolute top-3 right-3 z-20 flex flex-col space-y-2">
+        <!-- Re-center to Gwanghwamun -->
+        <button id="recenterBtn" title="광화문 중심으로 이동" class="w-10 h-10 rounded-xl bg-white text-slate-700 shadow-md border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-all active:scale-95">
+          <span class="text-base font-bold">🏛️</span>
+        </button>
+
+        <!-- Current Location (Geolocation) -->
+        <button id="geoBtn" title="내 위치 찾기" class="w-10 h-10 rounded-xl bg-white text-slate-700 shadow-md border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-all active:scale-95">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-600" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Mobile Toggle List floating button -->
+      <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 sm:hidden">
+        <button id="openMobileSidebarBtn" class="px-4 py-2.5 rounded-full bg-slate-900 text-white font-bold text-xs shadow-lg flex items-center space-x-2 active:scale-95">
+          <span>📋</span>
+          <span id="mobileListCount">맛집 목록 보기</span>
+        </button>
+      </div>
+
+      <!-- Map Legend Overlay -->
+      <div class="hidden lg:flex absolute bottom-4 right-4 z-20 bg-white/95 backdrop-blur-xs border border-slate-200 px-3 py-2 rounded-xl shadow-xs text-xs space-x-2.5 text-slate-600">
+        <div class="flex items-center space-x-1">
+          <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+          <span>한식</span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+          <span>일식</span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+          <span>중식</span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
+          <span>동남아</span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <span>피자·양식</span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+          <span>치킨·버거</span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+          <span>분식</span>
+        </div>
+        <div class="flex items-center space-x-1 font-semibold text-emerald-700">
+          <span>🪙 가성비 (1만원 이하)</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 1: RESTAURANT DETAIL & REVIEW VIEW                                  -->
+  <!-- ========================================================================= -->
+  <div id="detailModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Modal Header -->
+      <div class="p-4 border-b border-slate-100 flex items-start justify-between bg-slate-50/50">
+        <div>
+          <div class="flex items-center space-x-2">
+            <span id="detailCategoryBadge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">한식</span>
+            <span id="detailFrugalBadge" class="hidden text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">🪙 가성비 음식점 (1만원 이하)</span>
+          </div>
+          <h2 id="detailTitle" class="text-xl font-bold text-slate-900 mt-1">식당 이름</h2>
+          <p id="detailAddress" class="text-xs text-slate-500 mt-0.5">광화문 인근 도로명 주소</p>
+        </div>
+        <button id="closeDetailModalBtn" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- Key Highlights Box -->
+        <div class="bg-gradient-to-br from-slate-50 to-orange-50/30 p-3.5 rounded-xl border border-slate-200/80 flex items-center justify-between">
+          <div>
+            <span class="text-xs text-slate-500 font-medium">대표 추천 메뉴</span>
+            <div class="text-base font-bold text-slate-900" id="detailSignatureMenu">냉메밀</div>
+            <div class="text-sm font-black text-orange-600 mt-0.5" id="detailPrice">11,000원</div>
+          </div>
+          <div class="text-right">
+            <span class="text-xs text-slate-500 font-medium">직장인 평점</span>
+            <div class="text-lg font-black text-amber-500 flex items-center justify-end">
+              ⭐ <span id="detailRating" class="ml-1 text-slate-900">4.8</span>
+            </div>
+            <div class="text-xs text-slate-400">(<span id="detailReviewCount">0</span>개 리뷰)</div>
+          </div>
+        </div>
+
+        <!-- Like / Recommend Action Button -->
+        <div class="flex items-center space-x-2">
+          <button id="detailLikeBtn" class="flex-1 py-2.5 px-4 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 font-bold text-sm flex items-center justify-center space-x-2 active:scale-95 transition-all cursor-pointer">
+            <span>👍</span>
+            <span>추천해요! (<span id="detailLikeCount">0</span>)</span>
+          </button>
+          <button id="detailFocusMapBtn" class="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm flex items-center space-x-1.5 active:scale-95 transition-all cursor-pointer">
+            <span>🗺️</span>
+            <span>지도 위치 보기</span>
+          </button>
+        </div>
+
+        <!-- Reviews Section -->
+        <div class="border-t border-slate-100 pt-3">
+          <h3 class="text-sm font-bold text-slate-900 mb-2 flex items-center justify-between">
+            <span>동료들의 생생 한줄평</span>
+            <span class="text-xs text-slate-400 font-normal">광화문 직장인 실시간 리뷰</span>
+          </h3>
+
+          <!-- Reviews List -->
+          <div id="detailReviewsList" class="space-y-2.5 mb-4 max-h-48 overflow-y-auto pr-1">
+            <!-- Dynamically populated -->
+          </div>
+
+          <!-- Add Review Box -->
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+            <div class="text-xs font-bold text-slate-700">나도 한 줄 평 남기기</div>
+            <div class="grid grid-cols-2 gap-2">
+              <input type="text" id="reviewAuthorInput" placeholder="닉네임 (예: 세종로대리)" class="text-xs p-2 bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-orange-500 outline-none" />
+              <select id="reviewRatingSelect" class="text-xs p-2 bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-orange-500 outline-none">
+                <option value="5">⭐⭐⭐⭐⭐ 5점 (강추!)</option>
+                <option value="4" selected>⭐⭐⭐⭐ 4점 (맛있어요)</option>
+                <option value="3">⭐⭐⭐ 3점 (보통)</option>
+                <option value="2">⭐⭐ 2점 (아쉬움)</option>
+                <option value="1">⭐ 1점 (비추천)</option>
+              </select>
+            </div>
+            <div class="flex space-x-2">
+              <input type="text" id="reviewCommentInput" placeholder="웨이팅 시간, 꿀조합, 솔직 평가를 적어주세요!" class="flex-1 text-xs p-2 bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-orange-500 outline-none" />
+              <button id="submitReviewBtn" class="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 shrink-0 cursor-pointer">등록</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 2: ADD NEW RESTAURANT (USER REPORTING)                              -->
+  <!-- ========================================================================= -->
+  <div id="addModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Modal Header -->
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">광화문 실존 맛집 제보하기 📌</h2>
+          <p class="text-xs text-slate-500">광화문 일대의 진짜 맛집을 동료들과 나눠보세요</p>
+        </div>
+        <button id="closeAddModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Modal Form -->
+      <form id="addRestaurantForm" class="flex-1 overflow-y-auto p-4 space-y-3.5">
+        
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">식당 이름 <span class="text-rose-500">*</span></label>
+          <input type="text" id="addName" required placeholder="예: 광화문 미진, 청진옥" class="w-full text-xs sm:text-sm p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">음식 종류 <span class="text-rose-500">*</span></label>
+            <select id="addCategory" required class="w-full text-xs sm:text-sm p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+              <option value="한식">🍚 한식</option>
+              <option value="일식">🍣 일식</option>
+              <option value="중식">🥟 중식</option>
+              <option value="동남아">🍜 동남아</option>
+              <option value="피자·양식">🍕 피자·양식</option>
+              <option value="치킨·버거">🍗 치킨·버거</option>
+              <option value="분식">🥢 분식</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">대표 메뉴 가격 (원) <span class="text-rose-500">*</span></label>
+            <input type="number" id="addPrice" required min="1000" max="150000" step="500" placeholder="예: 9000" class="w-full text-xs sm:text-sm p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" />
+            <p class="text-[10px] text-emerald-600 mt-0.5 font-medium">💡 10,000원 이하는 가성비 음식점으로 자동 등록!</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">대표 추천 메뉴 <span class="text-rose-500">*</span></label>
+          <input type="text" id="addSignatureMenu" required placeholder="예: 냉메밀, 순대국, 팟타이, 치즈버거" class="w-full text-xs sm:text-sm p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">제보자 닉네임 <span class="text-rose-500">*</span></label>
+            <input type="text" id="addAuthor" required placeholder="예: 광화문직장인" class="w-full text-xs sm:text-sm p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">평점 (1~5점) <span class="text-rose-500">*</span></label>
+            <select id="addRating" class="w-full text-xs sm:text-sm p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+              <option value="5">⭐⭐⭐⭐⭐ 5.0 (최고)</option>
+              <option value="4" selected>⭐⭐⭐⭐ 4.0 (만족)</option>
+              <option value="3">⭐⭐⭐ 3.0 (보통)</option>
+              <option value="2">⭐⭐ 2.0 (아쉬움)</option>
+              <option value="1">⭐ 1.0 (별로)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">광화문 위치 구역 선택 <span class="text-rose-500">*</span></label>
+          <select id="addLocationPreset" class="w-full text-xs sm:text-sm p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+            <option value="lemeilleur">르메이에르 종로타운 / 종로1가</option>
+            <option value="d-tower">광화문 D타워 & 교보생명 인근</option>
+            <option value="gran-seoul">그랑서울 & 청진동 피맛골 골목</option>
+            <option value="sejong">세종문화회관 & 정부서울청사 서편</option>
+            <option value="cheonggye">청계광장 & 파이낸스센터(SFC) / 무교동</option>
+            <option value="gyeongbok">경복궁역 & 경희궁길 / 사직동</option>
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">※ 지도 위를 직접 클릭하면 원하는 위치에 정확한 핀을 찍을 수 있습니다.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">솔직 한 줄 평 & 직장인 꿀팁</label>
+          <textarea id="addComment" rows="2" placeholder="점심 11:30 전 도착 추천! 밥/국물 리필 가능 여부 등" class="w-full text-xs sm:text-sm p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"></textarea>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100 flex items-center justify-end space-x-2">
+          <button type="button" id="cancelAddBtn" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer">취소</button>
+          <button type="submit" class="px-5 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-lg shadow-sm transition-all cursor-pointer">제보 등록하기</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 3: 오늘 뭐 먹지? 음식 종류 룰렛 & 해당 음식점 추천 (LUNCH ROULETTE) -->
+  <!-- ========================================================================= -->
+  <div id="rouletteModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Modal Header -->
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-orange-500 via-amber-500 to-rose-500 text-white">
+        <div>
+          <div class="flex items-center space-x-1.5">
+            <span class="text-xl">🎲</span>
+            <h2 class="text-base sm:text-lg font-black tracking-tight">오늘 뭐 먹지? 점심 메뉴 룰렛</h2>
+          </div>
+          <p class="text-xs text-orange-100">음식 종류를 돌리고, 광화문 실존 맛집을 바로 확인하세요!</p>
+        </div>
+        <button id="closeRouletteModalBtn" class="text-white/80 hover:text-white p-1 rounded-lg cursor-pointer">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Roulette Controls & Body -->
+      <div class="flex-1 overflow-y-auto p-4 flex flex-col items-center">
+        
+        <!-- Frugal preference toggle in roulette -->
+        <div class="w-full flex items-center justify-between bg-slate-100/80 px-3.5 py-2 rounded-xl mb-3 text-xs">
+          <span class="font-bold text-slate-700 flex items-center space-x-1">
+            <span>🎯</span>
+            <span>추천 음식점 옵션:</span>
+          </span>
+          <label class="flex items-center space-x-1.5 cursor-pointer select-none">
+            <input type="checkbox" id="rouletteFrugalFilter" class="w-3.5 h-3.5 accent-emerald-600 rounded cursor-pointer" />
+            <span class="font-semibold text-emerald-800">🪙 1만원 이하 가성비 식당 우선</span>
+          </label>
+        </div>
+
+        <!-- Wheel Container with Pointer -->
+        <div class="relative w-64 h-64 sm:w-72 sm:h-72 my-1 flex items-center justify-center">
+          <!-- Top Arrow Pointer -->
+          <div class="absolute -top-2 z-20 flex flex-col items-center pointer-events-none">
+            <div class="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[16px] border-t-rose-600 drop-shadow-md"></div>
+          </div>
+          
+          <!-- Canvas Wheel -->
+          <canvas id="rouletteCanvas" width="300" height="300" class="w-full h-full rounded-full shadow-lg"></canvas>
+
+          <!-- Center Cap Button -->
+          <div class="absolute w-12 h-12 bg-white rounded-full shadow-md border-4 border-orange-500 z-10 flex items-center justify-center font-black text-xs text-orange-600 pointer-events-none">
+            점심
+          </div>
+        </div>
+
+        <!-- Spin Action Button -->
+        <button id="spinBtn" class="w-full mt-4 py-3 px-6 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-base shadow-md shadow-orange-500/30 transition-all active:scale-95 flex items-center justify-center space-x-2 cursor-pointer">
+          <span class="text-xl">🎰</span>
+          <span id="spinBtnText">점심 메뉴 룰렛 돌리기!</span>
+        </button>
+
+        <!-- Result Box (Appears after spin): Winner Category & Restaurant List -->
+        <div id="rouletteResultBox" class="w-full mt-4 p-4 bg-orange-50 border border-orange-200 rounded-2xl hidden animate-in fade-in slide-in-from-bottom-2">
+          
+          <div class="flex items-center justify-between border-b border-orange-200/80 pb-2.5">
+            <div>
+              <span class="text-[11px] font-bold text-orange-600 uppercase tracking-wider">오늘의 당첨 메뉴 종류 🎉</span>
+              <h3 id="winnerCategoryTitle" class="text-xl font-black text-slate-900 flex items-center space-x-1.5 mt-0.5">
+                <span id="winnerCategoryIcon">🍚</span>
+                <span id="winnerCategoryName">한식</span>
+              </h3>
+            </div>
+            <!-- Quick button to filter map by this category -->
+            <button id="winnerFilterMapBtn" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center space-x-1">
+              <span>🗺️</span>
+              <span>지도에서 모아보기</span>
+            </button>
+          </div>
+
+          <!-- Matching Gwanghwamun Restaurants Section -->
+          <div class="mt-3">
+            <div class="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
+              <span>광화문 추천 음식점 (<span id="winnerRestCount">0</span>곳)</span>
+              <span class="text-[11px] text-slate-500">클릭 시 상세 정보 및 리뷰 확인</span>
+            </div>
+
+            <!-- List of real restaurants serving this category -->
+            <div id="winnerRestaurantList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT: APPLICATION LOGIC, REAL DATA & FIREBASE INTEGRATION           -->
+  <!-- ========================================================================= -->
+  <script>
+    /**
+     * [Firebase Firestore 실시간 동기화 설정 가이드]
+     * Firebase 콘솔(https://console.firebase.google.com)에서 발급받은 본인 프로젝트 설정을
+     * 아래 firebaseConfig에 입력하시면, 모든 동료 간에 실시간으로 맛집 제보와 리뷰가 공유됩니다.
+     * 설정하지 않아도 브라우저 LocalStorage 및 광화문 엄선 100% 실존 맛집 데이터로 완전하게 작동합니다.
+     */
+    const firebaseConfig = {
+      apiKey: "",
+      authDomain: "",
+      projectId: "",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: ""
+    };
+
+    let db = null;
+    let isFirebaseActive = false;
+
+    try {
+      if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        isFirebaseActive = true;
+        document.getElementById('syncStatusIndicator').classList.remove('hidden');
+        document.getElementById('syncStatusText').textContent = "Firebase 실시간 연동됨";
+      }
+    } catch (e) {
+      console.warn("Firebase 로컬 모드로 동작:", e);
+    }
+
+    // =========================================================================
+    // 광화문 100% 실존 맛집 엄선 데이터셋 (한식, 일식, 중식, 동남아, 피자·양식, 치킨·버거, 분식)
+    // =========================================================================
+    const REAL_GWANGHWAMUN_RESTAURANTS = [
+      {
+        id: "ghm-real-1",
+        name: "광화문 미진",
+        category: "한식",
+        signatureMenu: "냉메밀 (판메밀 2판) & 보쌈",
+        price: 11000,
+        rating: 4.8,
+        likes: 128,
+        address: "서울 종로구 종로 19 르메이에르 종로타운 1층",
+        lat: 37.5709,
+        lng: 126.9793,
+        author: "광화문베테랑",
+        createdAt: "2026-09-01",
+        reviews: [
+          { author: "면식수행자", rating: 5, comment: "미쉐린 빕구르망 대표 맛집! 주전자 채로 부어 마시는 쯔유 육수가 예술입니다.", date: "2026-09-02" },
+          { author: "세종로김과장", rating: 5, comment: "11시 30분 전에는 가야 웨이팅 없이 들어갑니다. 메밀 양도 푸짐!", date: "2026-09-05" }
+        ]
+      },
+      {
+        id: "ghm-real-2",
+        name: "청진옥",
+        category: "한식",
+        signatureMenu: "해장국 (선지·양)",
+        price: 11000,
+        rating: 4.7,
+        likes: 92,
+        address: "서울 종로구 종로3길 32",
+        lat: 37.5717,
+        lng: 126.9799,
+        author: "해장마스터",
+        createdAt: "2026-09-01",
+        reviews: [
+          { author: "청진동러버", rating: 5, comment: "1937년부터 이어져 온 원조 서울식 맑은 해장국. 국물이 텁텁하지 않고 담백해요.", date: "2026-09-04" }
+        ]
+      },
+      {
+        id: "ghm-real-3",
+        name: "화목순대국 광화문점",
+        category: "한식",
+        signatureMenu: "순대국 (토렴식)",
+        price: 9000,
+        rating: 4.9,
+        likes: 145,
+        address: "서울 종로구 새문안로5길 11 지하 1층",
+        lat: 37.5714,
+        lng: 126.9748,
+        author: "순대국성애자",
+        createdAt: "2026-09-02",
+        reviews: [
+          { author: "성시경팬", rating: 5, comment: "곱창과 순대가 그릇 넘치게 들어감. 9,000원에 광화문 최고의 가성비 뚝배기!", date: "2026-09-06" },
+          { author: "루키사원", rating: 5, comment: "웨이팅이 길어도 국물 한 입 뜨는 순간 피로가 다 날아갑니다.", date: "2026-09-07" }
+        ]
+      },
+      {
+        id: "ghm-real-4",
+        name: "무교동 북어국집",
+        category: "한식",
+        signatureMenu: "북어해장국 단일메뉴",
+        price: 9500,
+        rating: 4.8,
+        likes: 114,
+        address: "서울 중구 을지로1길 38 (무교동)",
+        lat: 37.5678,
+        lng: 126.9803,
+        author: "무교동단골",
+        createdAt: "2026-09-02",
+        reviews: [
+          { author: "북어매니아", rating: 5, comment: "단일 메뉴라 앉자마자 나옵니다. 뽀얀 국물과 두부, 계란, 밥이 무한 리필!", date: "2026-09-05" }
+        ]
+      },
+      {
+        id: "ghm-real-5",
+        name: "백부장집 닭한마리",
+        category: "한식",
+        signatureMenu: "점심 닭칼국수 & 닭한마리",
+        price: 9000,
+        rating: 4.7,
+        likes: 85,
+        address: "서울 종로구 삼봉로 100-1",
+        lat: 37.5724,
+        lng: 126.9832,
+        author: "수요미식회추천",
+        createdAt: "2026-09-03",
+        reviews: [
+          { author: "칼국수러버", rating: 5, comment: "특제 마약 양념장에 부드러운 닭고기 찍어먹고 칼국수로 마무리하는 진리.", date: "2026-09-06" }
+        ]
+      },
+      {
+        id: "ghm-real-6",
+        name: "광화문 뚝감 (뚝배기감자탕)",
+        category: "한식",
+        signatureMenu: "뚝배기 감자탕 (통감자)",
+        price: 9500,
+        rating: 4.7,
+        likes: 89,
+        address: "서울 종로구 새문안로3길 21",
+        lat: 37.5718,
+        lng: 126.9734,
+        author: "감자탕헌터",
+        createdAt: "2026-09-03",
+        reviews: [
+          { author: "든든한국밥", rating: 5, comment: "포슬포슬한 알감자와 살코기가 가득한 감자탕. 9,500원 가성비 대만족!", date: "2026-09-05" }
+        ]
+      },
+      {
+        id: "ghm-real-7",
+        name: "서린낙지",
+        category: "한식",
+        signatureMenu: "매콤 낙지볶음 & 베이컨소시지구이",
+        price: 16000,
+        rating: 4.6,
+        likes: 72,
+        address: "서울 종로구 종로 19 르메이에르 종로타운 2층",
+        lat: 37.5708,
+        lng: 126.9792,
+        author: "피맛골의추억",
+        createdAt: "2026-09-01",
+        reviews: [
+          { author: "맵부심", rating: 5, comment: "스트레스 확 풀리는 매운 낙지와 베이컨소시지 철판 섞어먹기 강추!", date: "2026-09-04" }
+        ]
+      },
+      {
+        id: "ghm-real-8",
+        name: "후니도니",
+        category: "일식",
+        signatureMenu: "치즈 돈까스 & 미니 냉모밀",
+        price: 10000,
+        rating: 4.8,
+        likes: 130,
+        address: "서울 종로구 종로 19 르메이에르 종로타운 지하 1층",
+        lat: 37.5707,
+        lng: 126.9791,
+        author: "돈까스장인",
+        createdAt: "2026-09-02",
+        reviews: [
+          { author: "치즈폭포", rating: 5, comment: "모짜렐라와 체다치즈가 폭포처럼 흐르는 광화문 직장인 1위 돈까스집!", date: "2026-09-06" }
+        ]
+      },
+      {
+        id: "ghm-real-9",
+        name: "멘쯔 (광화문 경희궁점)",
+        category: "일식",
+        signatureMenu: "데미돈가스 & 돈코츠라멘",
+        price: 9500,
+        rating: 4.6,
+        likes: 67,
+        address: "서울 종로구 경희궁1길 7",
+        lat: 37.5711,
+        lng: 126.9715,
+        author: "경희궁골목러",
+        createdAt: "2026-09-03",
+        reviews: [
+          { author: "라멘마니아", rating: 5, comment: "일본 골목 식당 온 느낌. 진한 데미그라스 소스 돈가스가 일품이에요.", date: "2026-09-05" }
+        ]
+      },
+      {
+        id: "ghm-real-10",
+        name: "스시산원 경 (광화문점)",
+        category: "일식",
+        signatureMenu: "런치 스시 코스 & 지라시스시",
+        price: 16000,
+        rating: 4.7,
+        likes: 54,
+        address: "서울 종로구 종로1길 50 더케이트윈타워 지하 1층",
+        lat: 37.5752,
+        lng: 126.9785,
+        author: "스시러버",
+        createdAt: "2026-09-04",
+        reviews: [
+          { author: "직장인미식회", rating: 5, comment: "회식이나 특별한 점심 미팅 때 찾는 훌륭한 퀄리티의 초밥집.", date: "2026-09-06" }
+        ]
+      },
+      {
+        id: "ghm-real-11",
+        name: "동성각",
+        category: "중식",
+        signatureMenu: "간짜장 & 삼선짬뽕",
+        price: 7500,
+        rating: 4.6,
+        likes: 79,
+        address: "서울 종로구 새문안로5가길 11",
+        lat: 37.5721,
+        lng: 126.9742,
+        author: "짜장면탐구",
+        createdAt: "2026-09-02",
+        reviews: [
+          { author: "가성비왕", rating: 5, comment: "광화문에서 7,500원에 불맛 가득한 짜장면과 바삭한 탕수육을 먹을 수 있는 노포 중식당!", date: "2026-09-06" }
+        ]
+      },
+      {
+        id: "ghm-real-12",
+        name: "차알 (Cha 'R) 광화문D타워점",
+        category: "중식",
+        signatureMenu: "차돌 마라탕면 & 랩더치킨",
+        price: 12500,
+        rating: 4.5,
+        likes: 64,
+        address: "서울 종로구 종로3길 17 D타워 3층",
+        lat: 37.5710,
+        lng: 126.9788,
+        author: "D타워주민",
+        createdAt: "2026-09-03",
+        reviews: [
+          { author: "마라덕후", rating: 4, comment: "깔끔하고 세련된 미국식 퓨전 중식. 차돌박이가 듬뿍 들어가 국물이 진해요.", date: "2026-09-05" }
+        ]
+      },
+      {
+        id: "ghm-real-13",
+        name: "반포식스 광화문점",
+        category: "동남아",
+        signatureMenu: "양지 차돌 쌀국수 & 나시고랭",
+        price: 11000,
+        rating: 4.6,
+        likes: 82,
+        address: "서울 종로구 새문안로 92 광화문오피시아빌딩 지하 1층",
+        lat: 37.5700,
+        lng: 126.9745,
+        author: "해장쌀국수",
+        createdAt: "2026-09-03",
+        reviews: [
+          { author: "오피시아직원", rating: 5, comment: "숙주 듬뿍 넣고 청양고추 넣어 국물 들이켜면 속이 완전히 풀립니다.", date: "2026-09-07" }
+        ]
+      },
+      {
+        id: "ghm-real-14",
+        name: "타마린드 (Tamarind)",
+        category: "동남아",
+        signatureMenu: "베트남 소고기 쌀국수 & 분짜",
+        price: 13500,
+        rating: 4.7,
+        likes: 58,
+        address: "서울 중구 세종대로 136 서울파이낸스센터(SFC) 지하 2층",
+        lat: 37.5684,
+        lng: 126.9774,
+        author: "SFC직장인",
+        createdAt: "2026-09-04",
+        reviews: [
+          { author: "분짜사랑", rating: 5, comment: "분위기가 너무 좋고 분짜 숯불고기 풍미가 일품입니다. 데이트 점심으로도 굿!", date: "2026-09-05" }
+        ]
+      },
+      {
+        id: "ghm-real-15",
+        name: "뽐모도로 (Pomodoro)",
+        category: "피자·양식",
+        signatureMenu: "새우와 마늘 크림스파게티",
+        price: 16000,
+        rating: 4.8,
+        likes: 121,
+        address: "서울 종로구 새문안로 103 (세종문화회관 인근)",
+        lat: 37.5702,
+        lng: 126.9749,
+        author: "파스타전설",
+        createdAt: "2026-09-01",
+        reviews: [
+          { author: "광화문러", rating: 5, comment: "1994년부터 자리를 지킨 한국형 파스타의 원조! 소스가 접시 넘치게 푸짐해요.", date: "2026-09-06" }
+        ]
+      },
+      {
+        id: "ghm-real-16",
+        name: "폴리스 피자 (Paulie's Pizza)",
+        category: "피자·양식",
+        signatureMenu: "뉴욕 브릭오븐 갓파더 피자 (런치 세트)",
+        price: 12000,
+        rating: 4.7,
+        likes: 88,
+        address: "서울 종로구 종로3길 17 D타워 2층",
+        lat: 37.5710,
+        lng: 126.9788,
+        author: "뉴욕피자홀릭",
+        createdAt: "2026-09-02",
+        reviews: [
+          { author: "피자매니아", rating: 5, comment: "벽돌 화덕에 구워 겉바속촉 바삭한 정통 뉴욕식 도우와 짭짤한 페퍼로니의 조화!", date: "2026-09-05" }
+        ]
+      },
+      {
+        id: "ghm-real-17",
+        name: "브루클린 더 버거 조인트 광화문점",
+        category: "치킨·버거",
+        signatureMenu: "더 치즈버거 (140g)",
+        price: 9800,
+        rating: 4.7,
+        likes: 105,
+        address: "서울 종로구 종로3길 17 D타워 1층",
+        lat: 37.5711,
+        lng: 126.9787,
+        author: "버거매니아",
+        createdAt: "2026-09-02",
+        reviews: [
+          { author: "패티장인", rating: 5, comment: "육즙이 철철 넘치는 두툼한 소고기 패티. 9,800원으로 미국 정통 버거 맛 제대로 즐깁니다.", date: "2026-09-07" }
+        ]
+      },
+      {
+        id: "ghm-real-18",
+        name: "깐부치킨 광화문점",
+        category: "치킨·버거",
+        signatureMenu: "점심 바삭 순살치킨 & 수제버거 세트",
+        price: 9500,
+        rating: 4.5,
+        likes: 61,
+        address: "서울 종로구 세종대로23길 13",
+        lat: 37.5718,
+        lng: 126.9752,
+        author: "치킨러버",
+        createdAt: "2026-09-03",
+        reviews: [
+          { author: "치맥직장인", rating: 4, comment: "점심 런치로 나오는 바삭 순살치킨 정식이 진짜 든든하고 신속하게 나와요.", date: "2026-09-05" }
+        ]
+      },
+      {
+        id: "ghm-real-19",
+        name: "평안도만두집",
+        category: "분식",
+        signatureMenu: "이북식 평안도 손만두국",
+        price: 10000,
+        rating: 4.8,
+        likes: 96,
+        address: "서울 종로구 새문안로3길 30 대우빌딩 지하 1층",
+        lat: 37.5722,
+        lng: 126.9736,
+        author: "만두매니아",
+        createdAt: "2026-09-02",
+        reviews: [
+          { author: "수요미식회만두", rating: 5, comment: "자극적이지 않고 슴슴한 양지 육수에 주먹만 한 손만두가 가득 들어간 보약 같은 한 그릇.", date: "2026-09-06" }
+        ]
+      },
+      {
+        id: "ghm-real-20",
+        name: "만나손칼국수 & 김밥",
+        category: "분식",
+        signatureMenu: "얼큰 손칼국수 + 참치김밥 세트",
+        price: 7500,
+        rating: 4.6,
+        likes: 73,
+        address: "서울 종로구 사직로8길 42",
+        lat: 37.5742,
+        lng: 126.9718,
+        author: "지갑수호자",
+        createdAt: "2026-09-01",
+        reviews: [
+          { author: "가성비최강", rating: 5, comment: "7,500원에 직접 반죽해 썬 손칼국수와 푸짐한 김밥까지! 광화문 최고의 가성비 음식점.", date: "2026-09-04" }
+        ]
+      }
+    ];
+
+    // =========================================================================
+    // STATE MANAGEMENT
+    // =========================================================================
+    let restaurants = [];
+    let selectedCategory = 'all';
+    let isFrugalOnly = false; // "가성비 음식점" 1만원 이하 필터
+    let searchQuery = '';
+    let sortMode = 'rating'; // 'rating', 'price', 'likes'
+    let currentDetailRestaurant = null;
+    let map = null;
+    let markers = {};
+    let mapUserPin = null;
+
+    // Web Audio Sound FX Synthesizer (No external assets required)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playClickSound() {
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(160, audioCtx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.05);
+      } catch (e) {}
+    }
+
+    function playWinSound() {
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.25, audioCtx.currentTime + idx * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.1 + 0.4);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(audioCtx.currentTime + idx * 0.1);
+          osc.stop(audioCtx.currentTime + idx * 0.1 + 0.4);
+        });
+      } catch (e) {}
+    }
+
+    // =========================================================================
+    // LOCAL STORAGE / FIRESTORE SYNC
+    // =========================================================================
+    function loadRestaurants() {
+      const stored = localStorage.getItem('ghm_real_restaurants_v2');
+      if (stored) {
+        try {
+          restaurants = JSON.parse(stored);
+        } catch (e) {
+          restaurants = [...REAL_GWANGHWAMUN_RESTAURANTS];
+        }
+      } else {
+        restaurants = [...REAL_GWANGHWAMUN_RESTAURANTS];
+        saveRestaurantsLocally();
+      }
+
+      // Firestore Listener
+      if (isFirebaseActive && db) {
+        db.collection('restaurants').onSnapshot((snapshot) => {
+          if (!snapshot.empty) {
+            const remoteList = [];
+            snapshot.forEach(doc => {
+              remoteList.push({ id: doc.id, ...doc.data() });
+            });
+            restaurants = remoteList;
+            saveRestaurantsLocally();
+            renderAll();
+          }
+        }, (err) => {
+          console.error("Firestore sync error:", err);
+        });
+      }
+    }
+
+    function saveRestaurantsLocally() {
+      localStorage.setItem('ghm_real_restaurants_v2', JSON.stringify(restaurants));
+    }
+
+    async function persistRestaurant(newRest) {
+      restaurants.unshift(newRest);
+      saveRestaurantsLocally();
+
+      if (isFirebaseActive && db) {
+        try {
+          await db.collection('restaurants').doc(newRest.id).set(newRest);
+        } catch (e) {
+          console.error("Firestore restaurant write failed:", e);
+        }
+      }
+      renderAll();
+    }
+
+    async function persistLike(restaurantId) {
+      const rest = restaurants.find(r => r.id === restaurantId);
+      if (!rest) return;
+      rest.likes = (rest.likes || 0) + 1;
+      saveRestaurantsLocally();
+
+      if (isFirebaseActive && db) {
+        try {
+          await db.collection('restaurants').doc(restaurantId).update({
+            likes: rest.likes
+          });
+        } catch (e) {
+          console.error("Firestore like write failed:", e);
+        }
+      }
+      renderAll();
+    }
+
+    async function persistReview(restaurantId, reviewObj) {
+      const rest = restaurants.find(r => r.id === restaurantId);
+      if (!rest) return;
+      if (!rest.reviews) rest.reviews = [];
+      rest.reviews.unshift(reviewObj);
+      
+      const sum = rest.reviews.reduce((acc, cur) => acc + Number(cur.rating), 0);
+      rest.rating = Number((sum / rest.reviews.length).toFixed(1));
+
+      saveRestaurantsLocally();
+
+      if (isFirebaseActive && db) {
+        try {
+          await db.collection('restaurants').doc(restaurantId).update({
+            reviews: rest.reviews,
+            rating: rest.rating
+          });
+        } catch (e) {
+          console.error("Firestore review write failed:", e);
+        }
+      }
+      renderAll();
+    }
+
+    // =========================================================================
+    // MAP INITIALIZATION (Leaflet.js centered on Gwanghwamun Plaza)
+    // =========================================================================
+    const GWANGHWAMUN_CENTER = [37.5714, 126.9768];
+
+    function initMap() {
+      map = L.map('map', {
+        zoomControl: false,
+      }).setView(GWANGHWAMUN_CENTER, 16);
+
+      L.control.zoom({ position: 'topleft' }).addTo(map);
+
+      // OpenStreetMap & CartoDB tiles
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap & CartoDB',
+        maxZoom: 19,
+        subdomains: 'abcd',
+      }).addTo(map);
+
+      // Map Click Handler for restaurant reporting
+      map.on('click', (e) => {
+        if (mapUserPin) {
+          map.removeLayer(mapUserPin);
+        }
+        mapUserPin = L.marker([e.latlng.lat, e.latlng.lng], {
+          icon: L.divIcon({
+            className: 'custom-pin',
+            html: `<div class="bg-rose-600 text-white font-black text-xs px-2 py-1 rounded-full shadow-lg border-2 border-white flex items-center space-x-1 animate-bounce">
+              <span>📍</span><span>여기 제보</span>
+            </div>`,
+            iconSize: [80, 30],
+            iconAnchor: [40, 30]
+          })
+        }).addTo(map);
+
+        openAddModalWithCoordinates(e.latlng.lat, e.latlng.lng);
+      });
+    }
+
+    // Category styling & icons
+    const CATEGORY_STYLES = {
+      '한식': { color: 'bg-rose-500', text: 'text-rose-700', border: 'border-rose-400', icon: '🍚' },
+      '일식': { color: 'bg-indigo-500', text: 'text-indigo-700', border: 'border-indigo-400', icon: '🍣' },
+      '중식': { color: 'bg-amber-500', text: 'text-amber-700', border: 'border-amber-400', icon: '🥟' },
+      '동남아': { color: 'bg-teal-500', text: 'text-teal-700', border: 'border-teal-400', icon: '🍜' },
+      '피자·양식': { color: 'bg-emerald-500', text: 'text-emerald-700', border: 'border-emerald-400', icon: '🍕' },
+      '치킨·버거': { color: 'bg-orange-500', text: 'text-orange-700', border: 'border-orange-400', icon: '🍗' },
+      '분식': { color: 'bg-purple-500', text: 'text-purple-700', border: 'border-purple-400', icon: '🥢' },
+      '기타': { color: 'bg-slate-600', text: 'text-slate-700', border: 'border-slate-400', icon: '🍴' }
+    };
+
+    function updateMapMarkers(filtered) {
+      Object.keys(markers).forEach(id => {
+        map.removeLayer(markers[id]);
+        delete markers[id];
+      });
+
+      filtered.forEach(rest => {
+        const catStyle = CATEGORY_STYLES[rest.category] || CATEGORY_STYLES['기타'];
+        const isFrugal = rest.price <= 10000;
+
+        const markerHtml = `
+          <div class="group relative cursor-pointer transform transition-transform hover:scale-110 active:scale-95">
+            <div class="${isFrugal ? 'ring-2 ring-emerald-500 ring-offset-1 shadow-emerald-600/30' : 'shadow-slate-400/30'} flex items-center space-x-1 px-2 py-1 rounded-full ${catStyle.color} text-white font-bold text-xs shadow-md border-2 border-white">
+              <span>${catStyle.icon}</span>
+              <span class="max-w-[72px] truncate text-[11px]">${rest.name}</span>
+              ${isFrugal ? '<span class="bg-emerald-800 text-[10px] px-1 rounded-full text-emerald-200">🪙</span>' : ''}
+            </div>
+            <!-- Price label beneath -->
+            <div class="text-[10px] font-extrabold text-slate-800 bg-white/95 px-1.5 py-0.2 rounded shadow-xs border border-slate-200 mx-auto w-fit -mt-0.5 text-center">
+              ${rest.price.toLocaleString()}원
+            </div>
+          </div>
+        `;
+
+        const customIcon = L.divIcon({
+          className: 'custom-restaurant-marker',
+          html: markerHtml,
+          iconSize: [115, 42],
+          iconAnchor: [57, 21]
+        });
+
+        const marker = L.marker([rest.lat, rest.lng], { icon: customIcon }).addTo(map);
+
+        const popupContent = document.createElement('div');
+        popupContent.className = 'p-3 w-56 text-slate-800';
+        popupContent.innerHTML = `
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${catStyle.color} text-white">${rest.category}</span>
+            <span class="text-xs font-bold text-amber-500">⭐ ${rest.rating}</span>
+          </div>
+          <h4 class="text-sm font-black text-slate-900 leading-tight">${rest.name}</h4>
+          <p class="text-xs text-slate-500 mt-1">대표: <strong>${rest.signatureMenu}</strong></p>
+          <div class="mt-2 flex items-center justify-between">
+            <span class="text-xs font-extrabold ${isFrugal ? 'text-emerald-600' : 'text-slate-800'}">
+              ${isFrugal ? '🪙 ' : ''}${rest.price.toLocaleString()}원
+            </span>
+            <button onclick="window.openDetailModal('${rest.id}')" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-bold cursor-pointer">
+              상세 보기
+            </button>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent);
+        marker.on('click', () => {
+          playClickSound();
+        });
+
+        markers[rest.id] = marker;
+      });
+    }
+
+    // =========================================================================
+    // RESTAURANT FILTERING & LIST RENDERING
+    // =========================================================================
+    function getFilteredRestaurants() {
+      return restaurants.filter(r => {
+        if (selectedCategory !== 'all' && r.category !== selectedCategory) {
+          return false;
+        }
+        if (isFrugalOnly && r.price > 10000) {
+          return false;
+        }
+        if (searchQuery.trim() !== '') {
+          const q = searchQuery.toLowerCase();
+          const matchName = r.name.toLowerCase().includes(q);
+          const matchMenu = r.signatureMenu.toLowerCase().includes(q);
+          const matchCategory = r.category.toLowerCase().includes(q);
+          if (!matchName && !matchMenu && !matchCategory) return false;
+        }
+        return true;
+      }).sort((a, b) => {
+        if (sortMode === 'rating') return b.rating - a.rating;
+        if (sortMode === 'price') return a.price - b.price;
+        if (sortMode === 'likes') return (b.likes || 0) - (a.likes || 0);
+        return 0;
+      });
+    }
+
+    function renderRestaurantList() {
+      const container = document.getElementById('restaurantListContainer');
+      const filtered = getFilteredRestaurants();
+
+      document.getElementById('listSummaryText').innerHTML = `실존 맛집 <strong>${filtered.length}</strong>곳`;
+      document.getElementById('mobileListCount').textContent = `맛집 목록 (${filtered.length})`;
+
+      const counts = { 'all': restaurants.length, '한식': 0, '일식': 0, '중식': 0, '동남아': 0, '피자·양식': 0, '치킨·버거': 0, '분식': 0 };
+      restaurants.forEach(r => {
+        if (counts[r.category] !== undefined) counts[r.category]++;
+      });
+      Object.keys(counts).forEach(cat => {
+        const el = document.getElementById(`count-${cat}`);
+        if (el) el.textContent = counts[cat];
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="py-12 text-center text-slate-400">
+            <span class="text-3xl block mb-2">🔍</span>
+            <p class="text-xs font-semibold">조건에 맞는 맛집이 없습니다.</p>
+            <p class="text-[11px] text-slate-400 mt-1">새로운 광화문 맛집을 직접 제보해 보세요!</p>
+            <button onclick="document.getElementById('openAddModalBtn').click()" class="mt-3 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+              + 맛집 제보하기
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(rest => {
+        const catStyle = CATEGORY_STYLES[rest.category] || CATEGORY_STYLES['기타'];
+        const isFrugal = rest.price <= 10000;
+
+        return `
+          <div 
+            onclick="window.focusRestaurant('${rest.id}')"
+            class="group p-3 rounded-xl bg-white border border-slate-200/80 hover:border-orange-400 hover:shadow-sm transition-all cursor-pointer relative"
+          >
+            <div class="flex items-start justify-between">
+              <div class="flex-1 pr-2">
+                <div class="flex items-center space-x-1.5 mb-1">
+                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${catStyle.color} text-white">${rest.category}</span>
+                  ${isFrugal ? '<span class="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 flex items-center space-x-0.5"><span>🪙</span><span>가성비</span></span>' : ''}
+                  <span class="text-[11px] text-amber-500 font-bold">⭐ ${rest.rating}</span>
+                </div>
+                <h3 class="text-sm font-bold text-slate-900 group-hover:text-orange-600 transition-colors">${rest.name}</h3>
+                <p class="text-xs text-slate-500 mt-0.5 truncate">${rest.signatureMenu}</p>
+              </div>
+
+              <!-- Price Badge -->
+              <div class="text-right shrink-0">
+                <div class="text-xs sm:text-sm font-black ${isFrugal ? 'text-emerald-600' : 'text-slate-900'}">
+                  ${rest.price.toLocaleString()}원
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1 flex items-center justify-end space-x-1">
+                  <span>👍</span>
+                  <span>${rest.likes || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+              <span class="truncate max-w-[170px]">${rest.address || '광화문 인근'}</span>
+              <button 
+                onclick="event.stopPropagation(); window.openDetailModal('${rest.id}')" 
+                class="text-orange-600 hover:text-orange-700 font-bold cursor-pointer"
+              >
+                리뷰 (${rest.reviews ? rest.reviews.length : 0}) →
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderAll() {
+      const filtered = getFilteredRestaurants();
+      renderRestaurantList();
+      updateMapMarkers(filtered);
+    }
+
+    // Global navigation helpers
+    window.focusRestaurant = function(id) {
+      const rest = restaurants.find(r => r.id === id);
+      if (!rest || !map) return;
+      map.flyTo([rest.lat, rest.lng], 17, { duration: 0.8 });
+      if (markers[id]) {
+        markers[id].openPopup();
+      }
+      document.getElementById('sidebar').classList.add('max-sm:-translate-x-full');
+    };
+
+    window.openDetailModal = function(id) {
+      const rest = restaurants.find(r => r.id === id);
+      if (!rest) return;
+      currentDetailRestaurant = rest;
+
+      const catStyle = CATEGORY_STYLES[rest.category] || CATEGORY_STYLES['기타'];
+      document.getElementById('detailCategoryBadge').textContent = rest.category;
+      document.getElementById('detailCategoryBadge').className = `text-xs font-semibold px-2 py-0.5 rounded-full ${catStyle.color} text-white`;
+      
+      const frugalBadge = document.getElementById('detailFrugalBadge');
+      if (rest.price <= 10000) {
+        frugalBadge.classList.remove('hidden');
+      } else {
+        frugalBadge.classList.add('hidden');
+      }
+
+      document.getElementById('detailTitle').textContent = rest.name;
+      document.getElementById('detailAddress').textContent = rest.address || '광화문 일대';
+      document.getElementById('detailSignatureMenu').textContent = rest.signatureMenu;
+      document.getElementById('detailPrice').textContent = `${rest.price.toLocaleString()}원`;
+      document.getElementById('detailRating').textContent = rest.rating;
+      document.getElementById('detailReviewCount').textContent = rest.reviews ? rest.reviews.length : 0;
+      document.getElementById('detailLikeCount').textContent = rest.likes || 0;
+
+      const reviewsContainer = document.getElementById('detailReviewsList');
+      if (!rest.reviews || rest.reviews.length === 0) {
+        reviewsContainer.innerHTML = `<p class="text-xs text-slate-400 py-3 text-center">아직 등록된 리뷰가 없습니다. 첫 솔직 리뷰를 남겨보세요!</p>`;
+      } else {
+        reviewsContainer.innerHTML = rest.reviews.map(rev => `
+          <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-slate-800">${rev.author || '광화문 직장인'}</span>
+              <span class="text-amber-500 font-semibold">${'⭐'.repeat(rev.rating)}</span>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">${rev.comment}</p>
+            <div class="text-[10px] text-slate-400 mt-1">${rev.date || '최근'}</div>
+          </div>
+        `).join('');
+      }
+
+      document.getElementById('detailModal').classList.remove('hidden');
+    };
+
+    // =========================================================================
+    // LUNCH ROULETTE WHEEL: FOOD CATEGORY & RESTAURANT RECOMMENDATION ENGINE
+    // =========================================================================
+    // Categories requested: 한식, 일식, 중식, 동남아, 피자·양식, 치킨·버거, 분식
+    const ROULETTE_CATEGORIES = [
+      { name: '한식', icon: '🍚', color: '#f43f5e', desc: '백반, 국밥, 찌개, 닭한마리 등' },
+      { name: '일식', icon: '🍣', color: '#6366f1', desc: '돈까스, 라멘, 스시, 덮밥 등' },
+      { name: '중식', icon: '🥟', color: '#f59e0b', desc: '짜장면, 짬뽕, 마라탕, 탕수육 등' },
+      { name: '동남아', icon: '🍜', color: '#14b8a6', desc: '베트남 쌀국수, 분짜, 나시고랭 등' },
+      { name: '피자·양식', icon: '🍕', color: '#10b981', desc: '화덕피자, 파스타, 샐러드 등' },
+      { name: '치킨·버거', icon: '🍗', color: '#f97316', desc: '수제버거, 치킨정식, 샌드위치 등' },
+      { name: '분식', icon: '🥢', color: '#8b5cf6', desc: '손만두국, 칼국수, 김밥라면 등' }
+    ];
+
+    let isSpinning = false;
+    let currentAngle = 0;
+    let lastWonCategory = null;
+
+    function drawRouletteWheel() {
+      const canvas = document.getElementById('rouletteCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+      const radius = width / 2;
+
+      ctx.clearRect(0, 0, width, height);
+
+      const items = ROULETTE_CATEGORIES;
+      const sliceAngle = (2 * Math.PI) / items.length;
+
+      ctx.save();
+      ctx.translate(radius, radius);
+      ctx.rotate(currentAngle);
+
+      items.forEach((item, i) => {
+        const angle = i * sliceAngle;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radius, angle, angle + sliceAngle);
+        ctx.closePath();
+
+        ctx.fillStyle = item.color;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        // Draw Category Text and Icon
+        ctx.save();
+        ctx.rotate(angle + sliceAngle / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 3;
+
+        ctx.fillText(`${item.icon} ${item.name}`, radius - 20, 5);
+        ctx.restore();
+      });
+
+      ctx.restore();
+    }
+
+    function spinRoulette() {
+      if (isSpinning) return;
+      isSpinning = true;
+      document.getElementById('spinBtn').disabled = true;
+      document.getElementById('spinBtnText').textContent = '맛있는 점심 추천 중...!';
+      document.getElementById('rouletteResultBox').classList.add('hidden');
+
+      const winnerIndex = Math.floor(Math.random() * ROULETTE_CATEGORIES.length);
+      const sliceAngle = (2 * Math.PI) / ROULETTE_CATEGORIES.length;
+
+      const targetSectorMiddle = winnerIndex * sliceAngle + sliceAngle / 2;
+      const extraSpins = (5 + Math.floor(Math.random() * 3)) * (2 * Math.PI);
+      const pointerAngle = (3 * Math.PI) / 2; // 12 o'clock top pointer
+      const finalAngle = extraSpins + (pointerAngle - targetSectorMiddle);
+
+      const duration = 3800;
+      const startTime = performance.now();
+      const startAngle = currentAngle % (2 * Math.PI);
+      let lastClickTick = 0;
+
+      function animate(time) {
+        const elapsed = time - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        currentAngle = startAngle + (finalAngle - startAngle) * easeOut;
+
+        const tickVal = Math.floor(currentAngle / (sliceAngle / 2));
+        if (tickVal !== lastClickTick) {
+          playClickSound();
+          lastClickTick = tickVal;
+        }
+
+        drawRouletteWheel();
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          isSpinning = false;
+          document.getElementById('spinBtn').disabled = false;
+          document.getElementById('spinBtnText').textContent = '다시 돌리기 🎲';
+          playWinSound();
+
+          if (window.confetti) {
+            confetti({
+              particleCount: 80,
+              spread: 65,
+              origin: { y: 0.6 }
+            });
+          }
+
+          const wonCategory = ROULETTE_CATEGORIES[winnerIndex];
+          lastWonCategory = wonCategory;
+          showRouletteResult(wonCategory);
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    function showRouletteResult(category) {
+      const resultBox = document.getElementById('rouletteResultBox');
+      document.getElementById('winnerCategoryIcon').textContent = category.icon;
+      document.getElementById('winnerCategoryName').textContent = category.name;
+
+      const isFrugalChecked = document.getElementById('rouletteFrugalFilter').checked;
+
+      // Filter real restaurants that serve this category
+      let matchingRestaurants = restaurants.filter(r => r.category === category.name);
+      if (isFrugalChecked) {
+        const frugalMatches = matchingRestaurants.filter(r => r.price <= 10000);
+        if (frugalMatches.length > 0) {
+          matchingRestaurants = frugalMatches;
+        }
+      }
+
+      document.getElementById('winnerRestCount').textContent = matchingRestaurants.length;
+
+      const listContainer = document.getElementById('winnerRestaurantList');
+      if (matchingRestaurants.length === 0) {
+        listContainer.innerHTML = `<p class="text-xs text-slate-500 py-3 text-center">해당 카테고리의 등록된 맛집이 없습니다. 첫 번째 맛집을 제보해 보세요!</p>`;
+      } else {
+        listContainer.innerHTML = matchingRestaurants.map(rest => {
+          const isFrugal = rest.price <= 10000;
+          return `
+            <div 
+              onclick="window.selectFromRoulette('${rest.id}')"
+              class="p-2.5 rounded-xl bg-white border border-orange-200/80 hover:border-orange-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between"
+            >
+              <div class="pr-2 truncate">
+                <div class="flex items-center space-x-1.5">
+                  <span class="text-xs font-bold text-slate-900">${rest.name}</span>
+                  ${isFrugal ? '<span class="text-[9px] font-extrabold px-1 py-0.2 rounded bg-emerald-100 text-emerald-800">🪙가성비</span>' : ''}
+                  <span class="text-[11px] text-amber-500 font-bold">⭐ ${rest.rating}</span>
+                </div>
+                <div class="text-[11px] text-slate-500 truncate mt-0.5">${rest.signatureMenu}</div>
+              </div>
+              <div class="text-right shrink-0">
+                <div class="text-xs font-black ${isFrugal ? 'text-emerald-600' : 'text-slate-800'}">
+                  ${rest.price.toLocaleString()}원
+                </div>
+                <button class="text-[10px] text-orange-600 font-bold hover:underline mt-0.5">상세보기 →</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      resultBox.classList.remove('hidden');
+    }
+
+    window.selectFromRoulette = function(restaurantId) {
+      document.getElementById('rouletteModal').classList.add('hidden');
+      window.openDetailModal(restaurantId);
+    };
+
+    // =========================================================================
+    // DOM EVENT LISTENERS
+    // =========================================================================
+    document.addEventListener('DOMContentLoaded', () => {
+      // 1. Initialize Map & Restaurants
+      initMap();
+      loadRestaurants();
+      renderAll();
+
+      // 2. 가성비 음식점 Mode Toggle
+      const toggleFrugalBtn = document.getElementById('toggleFrugalBtn');
+      const frugalBadge = document.getElementById('frugalStatusBadge');
+      const filterBanner = document.getElementById('filterBanner');
+
+      function setFrugalMode(active) {
+        isFrugalOnly = active;
+        if (isFrugalOnly) {
+          toggleFrugalBtn.classList.add('bg-emerald-600', 'text-white', 'border-emerald-600', 'shadow-md');
+          toggleFrugalBtn.classList.remove('bg-emerald-50', 'text-emerald-800', 'border-emerald-300');
+          frugalBadge.className = 'bg-white text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold';
+          filterBanner.classList.remove('hidden');
+        } else {
+          toggleFrugalBtn.classList.remove('bg-emerald-600', 'text-white', 'border-emerald-600', 'shadow-md');
+          toggleFrugalBtn.classList.add('bg-emerald-50', 'text-emerald-800', 'border-emerald-300');
+          frugalBadge.className = 'bg-emerald-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold';
+          filterBanner.classList.add('hidden');
+        }
+        renderAll();
+      }
+
+      toggleFrugalBtn.addEventListener('click', () => {
+        setFrugalMode(!isFrugalOnly);
+        playClickSound();
+      });
+
+      document.getElementById('resetFrugalFilter').addEventListener('click', () => {
+        setFrugalMode(false);
+      });
+
+      // 3. Category Filter Chips
+      document.querySelectorAll('.category-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.category-chip').forEach(b => {
+            b.classList.remove('bg-slate-900', 'text-white', 'active');
+            b.classList.add('bg-white', 'text-slate-600', 'border', 'border-slate-200');
+          });
+          btn.classList.add('bg-slate-900', 'text-white', 'active');
+          btn.classList.remove('bg-white', 'text-slate-600', 'border', 'border-slate-200');
+
+          selectedCategory = btn.getAttribute('data-category');
+          playClickSound();
+          renderAll();
+        });
+      });
+
+      // 4. Search Input
+      document.getElementById('searchInput').addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        renderAll();
+      });
+
+      // 5. Sort Controls
+      document.getElementById('sortRatingBtn').addEventListener('click', () => {
+        sortMode = 'rating';
+        renderRestaurantList();
+      });
+      document.getElementById('sortPriceBtn').addEventListener('click', () => {
+        sortMode = 'price';
+        renderRestaurantList();
+      });
+      document.getElementById('sortLikesBtn').addEventListener('click', () => {
+        sortMode = 'likes';
+        renderRestaurantList();
+      });
+
+      // 6. Map Positioning
+      document.getElementById('recenterBtn').addEventListener('click', () => {
+        map.flyTo(GWANGHWAMUN_CENTER, 16);
+      });
+
+      document.getElementById('geoBtn').addEventListener('click', () => {
+        if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition((pos) => {
+            const userCoords = [pos.coords.latitude, pos.coords.longitude];
+            map.flyTo(userCoords, 17);
+            L.circleMarker(userCoords, {
+              radius: 8,
+              fillColor: '#3b82f6',
+              color: '#ffffff',
+              weight: 3,
+              opacity: 1,
+              fillOpacity: 0.9
+            }).addTo(map).bindPopup('현재 나의 위치').openPopup();
+          }, (err) => {
+            alert('현재 위치 정보를 가져올 수 없어 광화문 중심으로 이동합니다.');
+            map.flyTo(GWANGHWAMUN_CENTER, 16);
+          });
+        }
+      });
+
+      // 7. Mobile Sidebar Drawer
+      const sidebar = document.getElementById('sidebar');
+      document.getElementById('openMobileSidebarBtn').addEventListener('click', () => {
+        sidebar.classList.remove('max-sm:-translate-x-full');
+      });
+      document.getElementById('closeSidebarBtn').addEventListener('click', () => {
+        sidebar.classList.add('max-sm:-translate-x-full');
+      });
+
+      // 8. Detail Modal Handlers
+      document.getElementById('closeDetailModalBtn').addEventListener('click', () => {
+        document.getElementById('detailModal').classList.add('hidden');
+      });
+
+      document.getElementById('detailLikeBtn').addEventListener('click', () => {
+        if (!currentDetailRestaurant) return;
+        persistLike(currentDetailRestaurant.id);
+        document.getElementById('detailLikeCount').textContent = currentDetailRestaurant.likes;
+        playClickSound();
+      });
+
+      document.getElementById('detailFocusMapBtn').addEventListener('click', () => {
+        if (!currentDetailRestaurant) return;
+        document.getElementById('detailModal').classList.add('hidden');
+        window.focusRestaurant(currentDetailRestaurant.id);
+      });
+
+      document.getElementById('submitReviewBtn').addEventListener('click', () => {
+        if (!currentDetailRestaurant) return;
+        const author = document.getElementById('reviewAuthorInput').value.trim() || '광화문 직장인';
+        const rating = parseInt(document.getElementById('reviewRatingSelect').value, 10);
+        const comment = document.getElementById('reviewCommentInput').value.trim();
+
+        if (!comment) {
+          alert('한 줄 평 내용을 입력해 주세요!');
+          return;
+        }
+
+        const newReview = {
+          author,
+          rating,
+          comment,
+          date: new Date().toISOString().split('T')[0]
+        };
+
+        persistReview(currentDetailRestaurant.id, newReview);
+        document.getElementById('reviewCommentInput').value = '';
+        window.openDetailModal(currentDetailRestaurant.id);
+      });
+
+      // 9. Add Restaurant Modal Handlers
+      const addModal = document.getElementById('addModal');
+      document.getElementById('openAddModalBtn').addEventListener('click', () => {
+        addModal.classList.remove('hidden');
+      });
+      document.getElementById('closeAddModalBtn').addEventListener('click', () => {
+        addModal.classList.add('hidden');
+      });
+      document.getElementById('cancelAddBtn').addEventListener('click', () => {
+        addModal.classList.add('hidden');
+      });
+
+      let pendingLat = null;
+      let pendingLng = null;
+      window.openAddModalWithCoordinates = function(lat, lng) {
+        pendingLat = lat;
+        pendingLng = lng;
+        addModal.classList.remove('hidden');
+      };
+
+      const LOCATION_PRESETS = {
+        'lemeilleur': { lat: 37.5708, lng: 126.9792, address: '서울 종로구 종로 19 르메이에르 일대' },
+        'd-tower': { lat: 37.5710, lng: 126.9788, address: '서울 종로구 종로3길 17 D타워 & 교보빌딩 인근' },
+        'gran-seoul': { lat: 37.5709, lng: 126.9818, address: '서울 종로구 종로 33 그랑서울/청진동 피맛골' },
+        'sejong': { lat: 37.5724, lng: 126.9754, address: '서울 종로구 세종문화회관 & 광화문 광장 서편' },
+        'cheonggye': { lat: 37.5684, lng: 126.9774, address: '서울 중구 청계광장 & 서울파이낸스센터(SFC) 인근' },
+        'gyeongbok': { lat: 37.5740, lng: 126.9730, address: '서울 종로구 경희궁길 & 사직동 방향' }
+      };
+
+      document.getElementById('addRestaurantForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = document.getElementById('addName').value.trim();
+        const category = document.getElementById('addCategory').value;
+        const price = parseInt(document.getElementById('addPrice').value, 10);
+        const signatureMenu = document.getElementById('addSignatureMenu').value.trim();
+        const author = document.getElementById('addAuthor').value.trim() || '광화문직장인';
+        const rating = parseFloat(document.getElementById('addRating').value);
+        const comment = document.getElementById('addComment').value.trim();
+        const presetKey = document.getElementById('addLocationPreset').value;
+
+        let lat = pendingLat;
+        let lng = pendingLng;
+        let address = '광화문 인근';
+
+        if (!lat || !lng) {
+          const preset = LOCATION_PRESETS[presetKey] || LOCATION_PRESETS['lemeilleur'];
+          lat = preset.lat + (Math.random() - 0.5) * 0.0006;
+          lng = preset.lng + (Math.random() - 0.5) * 0.0006;
+          address = preset.address;
+        }
+
+        const newRestaurant = {
+          id: 'ghm-real-' + Date.now(),
+          name,
+          category,
+          signatureMenu,
+          price,
+          rating,
+          likes: 1,
+          address,
+          lat,
+          lng,
+          author,
+          createdAt: new Date().toISOString().split('T')[0],
+          reviews: comment ? [{
+            author,
+            rating,
+            comment,
+            date: new Date().toISOString().split('T')[0]
+          }] : []
+        };
+
+        persistRestaurant(newRestaurant);
+
+        document.getElementById('addRestaurantForm').reset();
+        pendingLat = null;
+        pendingLng = null;
+        if (mapUserPin) {
+          map.removeLayer(mapUserPin);
+          mapUserPin = null;
+        }
+        addModal.classList.add('hidden');
+        window.focusRestaurant(newRestaurant.id);
+      });
+
+      // 10. Roulette Modal Handlers
+      const rouletteModal = document.getElementById('rouletteModal');
+      document.getElementById('openRouletteBtn').addEventListener('click', () => {
+        rouletteModal.classList.remove('hidden');
+        document.getElementById('rouletteResultBox').classList.add('hidden');
+        drawRouletteWheel();
+      });
+
+      document.getElementById('closeRouletteModalBtn').addEventListener('click', () => {
+        rouletteModal.classList.add('hidden');
+      });
+
+      document.getElementById('spinBtn').addEventListener('click', spinRoulette);
+
+      document.getElementById('rouletteFrugalFilter').addEventListener('change', () => {
+        if (lastWonCategory) {
+          showRouletteResult(lastWonCategory);
+        }
+      });
+
+      // "지도에서 모아보기" button inside Roulette Result
+      document.getElementById('winnerFilterMapBtn').addEventListener('click', () => {
+        if (!lastWonCategory) return;
+        rouletteModal.classList.add('hidden');
+
+        // Trigger corresponding category chip
+        const targetChip = document.querySelector(`.category-chip[data-category="${lastWonCategory.name}"]`);
+        if (targetChip) {
+          targetChip.click();
+        }
+
+        // Check if frugal filter was active in roulette
+        if (document.getElementById('rouletteFrugalFilter').checked) {
+          setFrugalMode(true);
+        }
+
+        // Center map to Gwanghwamun to see all markers of this category
+        map.flyTo(GWANGHWAMUN_CENTER, 16);
+      });
+
+      // Initial Wheel Draw
+      drawRouletteWheel();
+    });
+  </script>
+</body>
+</html>

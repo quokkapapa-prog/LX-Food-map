@@ -1,0 +1,6 @@
+{
+  "name": "광화문 스마트 맛집 지도 & 점심 룰렛",
+  "description": "광화문 직장인을 위한 실시간 맛집 지도, 가성비 음식점 필터 및 점심 메뉴 룰렛 웹 애플리케이션",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
