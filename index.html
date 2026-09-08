@@ -43,9 +43,10 @@
   <!-- Canvas Confetti for Roulette Celebration -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
-  <!-- Firebase SDKs (Compat version for simple single-file HTML CDN usage) -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <!-- Supabase JS v2 Client Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- PapaParse for robust CSV parsing and accumulation -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
     /* Custom Scrollbar */
@@ -106,33 +107,56 @@
     </div>
 
     <!-- Actions & Filter Switches -->
-    <div class="flex items-center space-x-2 sm:space-x-3">
+    <div class="flex items-center space-x-1.5 sm:space-x-2.5">
       
       <!-- Frugal "가성비 음식점" Mode Toggle -->
-      <button id="toggleFrugalBtn" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs sm:text-sm font-semibold transition-all hover:bg-emerald-100 hover:shadow-xs cursor-pointer active:scale-95">
+      <button id="toggleFrugalBtn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs sm:text-sm font-semibold transition-all hover:bg-emerald-100 hover:shadow-xs cursor-pointer active:scale-95">
         <span class="text-sm">🪙</span>
-        <span>가성비 음식점</span>
+        <span class="hidden md:inline">가성비 음식점</span>
         <span id="frugalStatusBadge" class="bg-emerald-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">1만원 이하</span>
       </button>
 
       <!-- Lunch Roulette Button -->
-      <button id="openRouletteBtn" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs sm:text-sm font-bold shadow-sm hover:from-orange-600 hover:to-amber-600 transition-all active:scale-95 cursor-pointer animate-badge-pulse">
+      <button id="openRouletteBtn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs sm:text-sm font-bold shadow-sm hover:from-orange-600 hover:to-amber-600 transition-all active:scale-95 cursor-pointer animate-badge-pulse">
         <span>🎲</span>
         <span class="tracking-tight">오늘 뭐 먹지?</span>
       </button>
 
+      <!-- CSV Accumulation Button -->
+      <button id="openCsvModalBtn" class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-all active:scale-95 cursor-pointer shadow-2xs" title="CSV 맛집 데이터 일괄 업로드 및 Supabase 누적">
+        <span>📊</span>
+        <span>CSV 누적</span>
+      </button>
+
+      <!-- Supabase SQL Script View Button -->
+      <button id="openSqlModalBtn" class="hidden sm:flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 transition-all active:scale-95 cursor-pointer shadow-2xs" title="Supabase DB 테이블 생성 SQL 스크립트">
+        <span>⚡</span>
+        <span>Supabase SQL</span>
+      </button>
+
       <!-- Add Restaurant Button -->
-      <button id="openAddModalBtn" class="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs sm:text-sm font-medium hover:bg-slate-800 transition-all active:scale-95 cursor-pointer">
+      <button id="openAddModalBtn" class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-slate-900 text-white text-xs sm:text-sm font-medium hover:bg-slate-800 transition-all active:scale-95 cursor-pointer">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
         </svg>
-        <span class="hidden sm:inline">맛집 제보</span>
+        <span class="hidden lg:inline">맛집 제보</span>
       </button>
 
-      <!-- Firebase / Storage Status Indicator -->
-      <div id="syncStatusIndicator" class="hidden md:flex items-center space-x-1 text-[11px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md" title="클라우드 동기화 상태">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span id="syncStatusText">로컬 연결됨</span>
+      <!-- User Auth State & Logout Section -->
+      <div id="userProfileSection" class="flex items-center space-x-1.5 pl-1 border-l border-slate-200">
+        <div id="authBadge" class="flex items-center space-x-1 bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-1 rounded-lg text-xs font-semibold max-w-[130px] sm:max-w-[170px] truncate" title="로그인된 사용자">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+          <span id="userEmailText" class="truncate">인증 확인중...</span>
+        </div>
+        <button id="logoutBtn" class="px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-all cursor-pointer" title="로그아웃">
+          로그아웃
+        </button>
+      </div>
+
+      <!-- Supabase Connection Status Indicator -->
+      <div id="syncStatusIndicator" class="hidden xl:flex items-center space-x-1 text-[11px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md" title="Supabase 동기화 상태">
+        <span id="syncStatusDot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span id="syncStatusText">Supabase 연결</span>
       </div>
     </div>
   </header>
@@ -563,37 +587,391 @@
   </div>
 
   <!-- ========================================================================= -->
+  <!-- MODAL 4: SUPABASE AUTHENTICATION GATEWAY (LOGIN & SIGNUP)                 -->
+  <!-- ========================================================================= -->
+  <div id="authGateModal" class="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Auth Header -->
+      <div class="p-5 bg-gradient-to-tr from-slate-900 via-slate-800 to-orange-950 text-white relative">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center font-black text-xl shadow-md text-white">
+            광
+          </div>
+          <div>
+            <div class="flex items-center space-x-1.5">
+              <h2 class="text-lg font-black tracking-tight">광화문 맛집 지도</h2>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500/30 text-orange-300 border border-orange-400/30">Supabase Auth</span>
+            </div>
+            <p class="text-xs text-slate-300">인가된 사용자 전용 로그인 및 실시간 동기화</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auth Tab Navigation -->
+      <div class="flex border-b border-slate-200 bg-slate-50 text-xs font-bold">
+        <button id="authTabLogin" class="flex-1 py-3 text-center border-b-2 border-orange-500 text-orange-600 bg-white transition-all cursor-pointer">
+          로그인
+        </button>
+        <button id="authTabSignup" class="flex-1 py-3 text-center border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all cursor-pointer">
+          회원가입
+        </button>
+      </div>
+
+      <!-- Auth Body -->
+      <div class="p-5 space-y-4">
+        
+        <!-- Alert / Feedback Banner -->
+        <div id="authAlertBox" class="hidden p-3 rounded-xl text-xs font-medium border"></div>
+
+        <!-- Login Form -->
+        <form id="authLoginForm" class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">이메일 주소</label>
+            <input type="email" id="loginEmail" required placeholder="user@company.com" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">비밀번호</label>
+            <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all" />
+          </div>
+          <button type="submit" id="loginSubmitBtn" class="w-full py-2.5 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm shadow-sm transition-all active:scale-95 cursor-pointer flex items-center justify-center space-x-1.5">
+            <span>🔐</span>
+            <span>로그인하기</span>
+          </button>
+        </form>
+
+        <!-- Signup Form (Hidden by default) -->
+        <form id="authSignupForm" class="space-y-3 hidden">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">이메일 주소</label>
+            <input type="email" id="signupEmail" required placeholder="user@company.com" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">비밀번호 (6자 이상)</label>
+            <input type="password" id="signupPassword" required minlength="6" placeholder="••••••••" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">비밀번호 확인</label>
+            <input type="password" id="signupPasswordConfirm" required minlength="6" placeholder="••••••••" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all" />
+          </div>
+          <button type="submit" id="signupSubmitBtn" class="w-full py-2.5 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm shadow-sm transition-all active:scale-95 cursor-pointer flex items-center justify-center space-x-1.5">
+            <span>✨</span>
+            <span>새 계정 가입하기</span>
+          </button>
+        </form>
+
+        <!-- Guest / Demo Mode Quick Access -->
+        <div class="pt-2 border-t border-slate-100 flex flex-col space-y-2">
+          <button type="button" id="guestDemoBtn" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center space-x-1 cursor-pointer">
+            <span>⚡</span>
+            <span>테스트 계정으로 즉시 체험하기 (Guest Mode)</span>
+          </button>
+        </div>
+
+        <!-- Supabase Project Config Dropdown -->
+        <div class="pt-2 border-t border-slate-100">
+          <button type="button" id="toggleSupabaseConfigBtn" class="w-full text-left text-xs text-slate-500 hover:text-slate-800 font-semibold flex items-center justify-between cursor-pointer py-1">
+            <span class="flex items-center space-x-1">
+              <span>⚙️</span>
+              <span>Supabase 프로젝트 연결 설정 (URL / Key)</span>
+            </span>
+            <span id="configToggleArrow">▼</span>
+          </button>
+
+          <div id="supabaseConfigPanel" class="hidden mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+            <div>
+              <label class="block font-bold text-slate-600 mb-0.5">Supabase URL</label>
+              <input type="text" id="cfgSupabaseUrl" placeholder="https://xyzcompany.supabase.co" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md font-mono text-[11px]" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-0.5">Supabase Anon Key</label>
+              <input type="password" id="cfgSupabaseAnonKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md font-mono text-[11px]" />
+            </div>
+            <div class="flex items-center justify-between pt-1">
+              <button type="button" id="saveSupabaseConfigBtn" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-bold cursor-pointer transition-all">
+                설정 저장 및 연결
+              </button>
+              <button type="button" id="openSqlFromConfigBtn" class="text-orange-600 hover:underline font-bold cursor-pointer">
+                SQL 스크립트 보기
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 5: CSV BATCH IMPORT & SUPABASE ACCUMULATION MODAL                   -->
+  <!-- ========================================================================= -->
+  <div id="csvModal" class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Header -->
+      <div class="p-4 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">📊</span>
+          <div>
+            <h2 class="text-base font-bold">CSV 데이터 Supabase 누적 저장</h2>
+            <p class="text-xs text-slate-300">식당 데이터를 CSV 파일로 일괄 업로드하여 Supabase DB에 누적 적재합니다.</p>
+          </div>
+        </div>
+        <button id="closeCsvModalBtn" class="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        
+        <!-- Status / Notice -->
+        <div id="csvAlertBox" class="hidden p-3 rounded-xl border text-xs font-semibold"></div>
+
+        <!-- Action Bar: Download Sample CSV & Load Built-in 20 Restaurants -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button type="button" id="downloadSampleCsvBtn" class="p-2.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer">
+            <span>📄</span>
+            <span>샘플 CSV 템플릿 다운로드</span>
+          </button>
+          <button type="button" id="loadPresetCsvBtn" class="p-2.5 rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer">
+            <span>⚡</span>
+            <span>광화문 엄선 20곳 CSV 즉시 로드</span>
+          </button>
+        </div>
+
+        <!-- File Upload Drag & Drop Area -->
+        <div id="csvDropZone" class="border-2 border-dashed border-slate-300 hover:border-orange-500 bg-slate-50 hover:bg-orange-50/50 rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-2">
+          <input type="file" id="csvFileInput" accept=".csv,text/csv" class="hidden" />
+          <div class="w-12 h-12 rounded-full bg-white shadow-xs border border-slate-200 flex items-center justify-center text-2xl">
+            📂
+          </div>
+          <div>
+            <p class="font-bold text-slate-800 text-sm">CSV 파일을 드래그하거나 클릭하여 업로드</p>
+            <p class="text-slate-500 text-[11px] mt-0.5">지원 서식: 식당명(name), 카테고리(category), 대표메뉴(signatureMenu), 가격(price), 평점(rating), 주소(address)</p>
+          </div>
+          <span class="px-3 py-1 bg-white border border-slate-200 rounded-full font-semibold text-slate-700 text-[11px] shadow-2xs">
+            컴퓨터에서 CSV 파일 선택
+          </span>
+        </div>
+
+        <!-- Parsed Data Preview -->
+        <div id="csvPreviewSection" class="hidden space-y-2 border border-slate-200 rounded-xl p-3 bg-white">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span class="font-bold text-slate-800 flex items-center space-x-1">
+              <span>🔍</span>
+              <span>업로드 데이터 미리보기 (<span id="parsedRowCount" class="text-orange-600 font-black">0</span>건 파싱됨)</span>
+            </span>
+            <span class="text-[11px] text-slate-500">기존 DB에 누적 적재됩니다.</span>
+          </div>
+
+          <div class="overflow-x-auto max-h-48 border border-slate-100 rounded-lg">
+            <table class="w-full text-left border-collapse text-[11px]">
+              <thead class="bg-slate-50 text-slate-600 sticky top-0 border-b border-slate-200">
+                <tr>
+                  <th class="p-2">식당명</th>
+                  <th class="p-2">카테고리</th>
+                  <th class="p-2">대표메뉴</th>
+                  <th class="p-2">가격</th>
+                  <th class="p-2">평점</th>
+                  <th class="p-2">주소</th>
+                </tr>
+              </thead>
+              <tbody id="csvPreviewTableBody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Accumulation Action Button -->
+          <div class="pt-2 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <label class="flex items-center space-x-1 text-slate-600 font-semibold cursor-pointer">
+                <input type="checkbox" id="upsertConflictCheck" checked class="w-3.5 h-3.5 accent-orange-600 rounded" />
+                <span>중복 식당명 발생 시 최신 데이터로 업데이트 (Upsert)</span>
+              </label>
+            </div>
+            <button type="button" id="saveCsvToSupabaseBtn" class="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-xl shadow-sm transition-all active:scale-95 cursor-pointer flex items-center space-x-1.5">
+              <span>🚀</span>
+              <span id="saveCsvBtnText">Supabase DB에 누적 저장</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Export CSV Section -->
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+          <div>
+            <div class="font-bold text-slate-800">현재 등록된 맛집 데이터 CSV 내보내기</div>
+            <div class="text-slate-500 text-[11px]">현재 Supabase DB / 로컬에 저장된 모든 맛집을 CSV 파일로 다운로드합니다.</div>
+          </div>
+          <button type="button" id="exportCurrentCsvBtn" class="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1">
+            <span>📥</span>
+            <span>CSV 다운로드</span>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 6: SUPABASE DATABASE SQL SCHEMA & RLS POLICIES MODAL                -->
+  <!-- ========================================================================= -->
+  <div id="sqlModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Header -->
+      <div class="p-4 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">⚡</span>
+          <div>
+            <h2 class="text-base font-bold">Supabase DB 테이블 생성 & RLS 보안 정책 SQL</h2>
+            <p class="text-xs text-slate-300">Supabase SQL Editor에 복사하여 붙여넣으면 즉시 테이블과 권한이 생성됩니다.</p>
+          </div>
+        </div>
+        <button id="closeSqlModalBtn" class="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
+        
+        <div class="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-900 leading-relaxed">
+          <p class="font-bold mb-1">📌 적용 방법 (3단계):</p>
+          <ol class="list-decimal list-inside space-y-0.5 text-[11px] text-amber-800">
+            <li><a href="https://supabase.com/dashboard" target="_blank" class="font-bold underline text-amber-900">Supabase 대시보드</a> 접속 후 프로젝트 선택</li>
+            <li>좌측 메뉴에서 <strong>SQL Editor</strong> 클릭</li>
+            <li>아래 SQL 스크립트를 <strong>'전체 SQL 복사'</strong> 버튼으로 복사 후 붙여넣고 <strong>Run (실행)</strong> 클릭</li>
+          </ol>
+        </div>
+
+        <div class="relative">
+          <pre class="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-[11px] overflow-x-auto leading-relaxed max-h-96 selection:bg-orange-500 selection:text-white" id="sqlCodeContent"><code>-- =========================================================================
+-- 1. 광화문 맛집(restaurants) 테이블 생성
+-- =========================================================================
+create table if not exists public.restaurants (
+  id text primary key,
+  name text not null,
+  category text not null,
+  signature_menu text,
+  price integer not null default 0,
+  rating numeric(3, 1) default 4.5,
+  likes integer default 0,
+  address text,
+  lat double precision,
+  lng double precision,
+  author text default '광화문직장인',
+  reviews jsonb default '[]'::jsonb,
+  user_id uuid references auth.users(id) on delete set null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- =========================================================================
+-- 2. 검색 및 필터 성능 최적화 인덱스 생성
+-- =========================================================================
+create index if not exists idx_restaurants_category on public.restaurants (category);
+create index if not exists idx_restaurants_price on public.restaurants (price);
+create index if not exists idx_restaurants_rating on public.restaurants (rating);
+create index if not exists idx_restaurants_created_at on public.restaurants (created_at desc);
+
+-- =========================================================================
+-- 3. Row Level Security (RLS) 활성화 (데이터 접근 보안)
+-- =========================================================================
+alter table public.restaurants enable row level security;
+
+-- =========================================================================
+-- 4. 인가된 사용자(authenticated) 대상 읽기, 쓰기, 수정 정책 부여
+-- =========================================================================
+-- 4-1. 인가된 사용자 누구나 맛집 데이터 조회(SELECT) 가능
+drop policy if exists "Allow authenticated users to read restaurants" on public.restaurants;
+create policy "Allow authenticated users to read restaurants"
+on public.restaurants for select
+to authenticated
+using (true);
+
+-- 4-2. 인가된 사용자 누구나 CSV 또는 신규 맛집 데이터 누적 적재(INSERT/UPSERT) 가능
+drop policy if exists "Allow authenticated users to insert restaurants" on public.restaurants;
+create policy "Allow authenticated users to insert restaurants"
+on public.restaurants for insert
+to authenticated
+with check (true);
+
+-- 4-3. 인가된 사용자의 맛집 정보 및 추천수/리뷰 업데이트(UPDATE) 허용
+drop policy if exists "Allow authenticated users to update restaurants" on public.restaurants;
+create policy "Allow authenticated users to update restaurants"
+on public.restaurants for update
+to authenticated
+using (true);
+
+-- =========================================================================
+-- 5. Realtime 복제 활성화 (새 식당 등록 및 CSV 누적 시 실시간 전파)
+-- =========================================================================
+alter publication supabase_realtime add table public.restaurants;</code></pre>
+
+          <button type="button" id="copySqlBtn" class="absolute top-2.5 right-2.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center space-x-1">
+            <span id="copySqlIcon">📋</span>
+            <span id="copySqlText">전체 SQL 복사</span>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
   <!-- JAVASCRIPT: APPLICATION LOGIC, REAL DATA & FIREBASE INTEGRATION           -->
   <!-- ========================================================================= -->
   <script>
     /**
-     * [Firebase Firestore 실시간 동기화 설정 가이드]
-     * Firebase 콘솔(https://console.firebase.google.com)에서 발급받은 본인 프로젝트 설정을
-     * 아래 firebaseConfig에 입력하시면, 모든 동료 간에 실시간으로 맛집 제보와 리뷰가 공유됩니다.
-     * 설정하지 않아도 브라우저 LocalStorage 및 광화문 엄선 100% 실존 맛집 데이터로 완전하게 작동합니다.
+     * =========================================================================
+     * SUPABASE CLIENT & AUTHENTICATION CONFIGURATION (Supabase JS v2)
+     * =========================================================================
+     * Supabase 콘솔(https://supabase.com/dashboard)의 Project Settings -> API에서
+     * Project URL 및 anon public key를 확인할 수 있습니다.
      */
-    const firebaseConfig = {
-      apiKey: "",
-      authDomain: "",
-      projectId: "",
-      storageBucket: "",
-      messagingSenderId: "",
-      appId: ""
-    };
+    let SUPABASE_URL = localStorage.getItem('supabase_url') || "";
+    let SUPABASE_ANON_KEY = localStorage.getItem('supabase_anon_key') || "";
+    
+    let supabaseClient = null;
+    let isSupabaseActive = false;
+    let currentAuthUser = null;
+    let realtimeChannel = null;
 
-    let db = null;
-    let isFirebaseActive = false;
-
-    try {
-      if (firebaseConfig.apiKey && firebaseConfig.projectId) {
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.firestore();
-        isFirebaseActive = true;
-        document.getElementById('syncStatusIndicator').classList.remove('hidden');
-        document.getElementById('syncStatusText').textContent = "Firebase 실시간 연동됨";
+    function initSupabaseClient() {
+      try {
+        if (window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
+          supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: {
+              persistSession: true,
+              autoRefreshToken: true,
+              detectSessionInUrl: true
+            }
+          });
+          isSupabaseActive = true;
+          updateSyncIndicator(true, "Supabase 연동 완료");
+          return true;
+        }
+      } catch (err) {
+        console.warn("Supabase 클라이언트 생성 실패:", err);
       }
-    } catch (e) {
-      console.warn("Firebase 로컬 모드로 동작:", e);
+      isSupabaseActive = false;
+      updateSyncIndicator(false, "Supabase 설정 필요");
+      return false;
+    }
+
+    function updateSyncIndicator(active, text) {
+      const dot = document.getElementById('syncStatusDot');
+      const textEl = document.getElementById('syncStatusText');
+      if (dot) {
+        dot.className = `w-2 h-2 rounded-full ${active ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`;
+      }
+      if (textEl) {
+        textEl.textContent = text;
+      }
     }
 
     // =========================================================================
@@ -996,9 +1374,9 @@
     }
 
     // =========================================================================
-    // LOCAL STORAGE / FIRESTORE SYNC
+    // LOCAL STORAGE / SUPABASE REALTIME SYNC & CSV ACCUMULATION
     // =========================================================================
-    function loadRestaurants() {
+    function loadRestaurantsLocally() {
       const stored = localStorage.getItem('ghm_real_restaurants_v2');
       if (stored) {
         try {
@@ -1010,22 +1388,74 @@
         restaurants = [...REAL_GWANGHWAMUN_RESTAURANTS];
         saveRestaurantsLocally();
       }
+      renderAll();
+    }
 
-      // Firestore Listener
-      if (isFirebaseActive && db) {
-        db.collection('restaurants').onSnapshot((snapshot) => {
-          if (!snapshot.empty) {
-            const remoteList = [];
-            snapshot.forEach(doc => {
-              remoteList.push({ id: doc.id, ...doc.data() });
-            });
-            restaurants = remoteList;
+    async function loadRestaurants() {
+      // 1. Initial local load for instant rendering
+      loadRestaurantsLocally();
+
+      // 2. If Supabase is active, fetch from remote 'restaurants' table
+      if (isSupabaseActive && supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('restaurants')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (error) {
+            console.warn("Supabase 데이터 조회 실패:", error.message);
+          } else if (data && data.length > 0) {
+            // Map PostgreSQL schema to app restaurant model
+            restaurants = data.map(r => ({
+              id: r.id,
+              name: r.name,
+              category: r.category,
+              signatureMenu: r.signature_menu || r.signatureMenu || '',
+              price: Number(r.price) || 0,
+              rating: Number(r.rating) || 4.5,
+              likes: Number(r.likes) || 0,
+              address: r.address || '',
+              lat: Number(r.lat),
+              lng: Number(r.lng),
+              author: r.author || '광화문직장인',
+              createdAt: r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+              reviews: Array.isArray(r.reviews) ? r.reviews : []
+            }));
             saveRestaurantsLocally();
             renderAll();
+          } else if (data && data.length === 0) {
+            // Table is currently empty, offer initial load
+            console.info("Supabase 테이블이 비어있어 기본 엄선 맛집 데이터를 유지합니다.");
           }
-        }, (err) => {
-          console.error("Firestore sync error:", err);
-        });
+        } catch (err) {
+          console.error("Supabase load exception:", err);
+        }
+
+        subscribeToSupabaseRealtime();
+      }
+    }
+
+    function subscribeToSupabaseRealtime() {
+      if (!isSupabaseActive || !supabaseClient) return;
+      if (realtimeChannel) {
+        supabaseClient.removeChannel(realtimeChannel);
+      }
+
+      try {
+        realtimeChannel = supabaseClient
+          .channel('public:restaurants')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants' }, (payload) => {
+            console.log("Supabase Realtime 변경 수신:", payload.eventType);
+            loadRestaurants();
+          })
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              updateSyncIndicator(true, "Supabase 실시간 연동중");
+            }
+          });
+      } catch (e) {
+        console.warn("Supabase Realtime 구독 실패:", e);
       }
     }
 
@@ -1036,15 +1466,38 @@
     async function persistRestaurant(newRest) {
       restaurants.unshift(newRest);
       saveRestaurantsLocally();
+      renderAll();
 
-      if (isFirebaseActive && db) {
+      if (isSupabaseActive && supabaseClient) {
         try {
-          await db.collection('restaurants').doc(newRest.id).set(newRest);
+          const dbRow = {
+            id: newRest.id,
+            name: newRest.name,
+            category: newRest.category,
+            signature_menu: newRest.signatureMenu,
+            price: newRest.price,
+            rating: newRest.rating,
+            likes: newRest.likes || 0,
+            address: newRest.address,
+            lat: newRest.lat,
+            lng: newRest.lng,
+            author: newRest.author || '광화문직장인',
+            reviews: newRest.reviews || [],
+            user_id: currentAuthUser?.id || null,
+            created_at: new Date().toISOString()
+          };
+
+          const { error } = await supabaseClient
+            .from('restaurants')
+            .upsert([dbRow], { onConflict: 'id' });
+
+          if (error) {
+            console.error("Supabase 식당 등록 실패:", error);
+          }
         } catch (e) {
-          console.error("Firestore restaurant write failed:", e);
+          console.error("Supabase write exception:", e);
         }
       }
-      renderAll();
     }
 
     async function persistLike(restaurantId) {
@@ -1052,17 +1505,20 @@
       if (!rest) return;
       rest.likes = (rest.likes || 0) + 1;
       saveRestaurantsLocally();
+      renderAll();
 
-      if (isFirebaseActive && db) {
+      if (isSupabaseActive && supabaseClient) {
         try {
-          await db.collection('restaurants').doc(restaurantId).update({
-            likes: rest.likes
-          });
+          const { error } = await supabaseClient
+            .from('restaurants')
+            .update({ likes: rest.likes })
+            .eq('id', restaurantId);
+
+          if (error) console.error("Supabase 추천수 업데이트 실패:", error);
         } catch (e) {
-          console.error("Firestore like write failed:", e);
+          console.error("Supabase like write failed:", e);
         }
       }
-      renderAll();
     }
 
     async function persistReview(restaurantId, reviewObj) {
@@ -1075,18 +1531,129 @@
       rest.rating = Number((sum / rest.reviews.length).toFixed(1));
 
       saveRestaurantsLocally();
+      renderAll();
 
-      if (isFirebaseActive && db) {
+      if (isSupabaseActive && supabaseClient) {
         try {
-          await db.collection('restaurants').doc(restaurantId).update({
-            reviews: rest.reviews,
-            rating: rest.rating
-          });
+          const { error } = await supabaseClient
+            .from('restaurants')
+            .update({
+              reviews: rest.reviews,
+              rating: rest.rating
+            })
+            .eq('id', restaurantId);
+
+          if (error) console.error("Supabase 리뷰 업데이트 실패:", error);
         } catch (e) {
-          console.error("Firestore review write failed:", e);
+          console.error("Supabase review write failed:", e);
         }
       }
+    }
+
+    /**
+     * CSV 데이터를 파싱하여 Supabase DB에 누적 저장
+     */
+    async function accumulateCsvRowsToSupabase(parsedRows, updateOnConflict = true) {
+      if (!parsedRows || parsedRows.length === 0) {
+        throw new Error("누적할 데이터가 없습니다.");
+      }
+
+      // Convert parsed rows to Supabase schema format
+      const dbRows = parsedRows.map((item, index) => {
+        const id = item.id || ('ghm-csv-' + Date.now() + '-' + index);
+        const name = (item.name || item['식당명'] || item['이름'] || '').trim();
+        const category = (item.category || item['카테고리'] || item['음식종류'] || item['업종'] || '한식').trim();
+        const signatureMenu = (item.signatureMenu || item['signature_menu'] || item['대표메뉴'] || item['메뉴'] || '').trim();
+        const price = parseInt(item.price || item['가격'] || item['점심가격'] || '10000', 10) || 10000;
+        const rating = parseFloat(item.rating || item['평점'] || item['별점'] || '4.5') || 4.5;
+        const likes = parseInt(item.likes || item['추천수'] || '1', 10) || 1;
+        const address = (item.address || item['주소'] || '서울 종로구 광화문 인근').trim();
+        
+        let lat = parseFloat(item.lat || item['위도']);
+        let lng = parseFloat(item.lng || item['경도']);
+        if (isNaN(lat) || isNaN(lng) || !lat || !lng) {
+          // Gwanghwamun default with slight dispersion
+          lat = 37.5714 + (Math.random() - 0.5) * 0.005;
+          lng = 126.9768 + (Math.random() - 0.5) * 0.005;
+        }
+
+        const author = (item.author || item['작성자'] || item['등록자'] || currentAuthUser?.email?.split('@')[0] || '광화문직장인').trim();
+        let reviews = [];
+        const comment = (item.comment || item['한줄평'] || item['리뷰'] || '').trim();
+        if (comment) {
+          reviews.push({
+            author,
+            rating,
+            comment,
+            date: new Date().toISOString().split('T')[0]
+          });
+        }
+
+        return {
+          id,
+          name,
+          category,
+          signature_menu: signatureMenu,
+          price,
+          rating,
+          likes,
+          address,
+          lat,
+          lng,
+          author,
+          reviews,
+          user_id: currentAuthUser?.id || null,
+          created_at: new Date().toISOString()
+        };
+      }).filter(r => r.name.length > 0);
+
+      if (dbRows.length === 0) {
+        throw new Error("유효한 식당명이 포함된 데이터가 없습니다.");
+      }
+
+      // If Supabase is connected, batch upsert into PostgreSQL
+      if (isSupabaseActive && supabaseClient) {
+        const { data, error } = await supabaseClient
+          .from('restaurants')
+          .upsert(dbRows, { onConflict: updateOnConflict ? 'id' : undefined });
+
+        if (error) {
+          throw new Error("Supabase 누적 저장 오류: " + error.message);
+        }
+      }
+
+      // Also merge into local memory and localStorage
+      dbRows.forEach(row => {
+        const localRest = {
+          id: row.id,
+          name: row.name,
+          category: row.category,
+          signatureMenu: row.signature_menu,
+          price: row.price,
+          rating: row.rating,
+          likes: row.likes,
+          address: row.address,
+          lat: row.lat,
+          lng: row.lng,
+          author: row.author,
+          createdAt: row.created_at.split('T')[0],
+          reviews: row.reviews
+        };
+
+        const existingIdx = restaurants.findIndex(r => r.id === localRest.id || r.name === localRest.name);
+        if (existingIdx >= 0) {
+          if (updateOnConflict) {
+            restaurants[existingIdx] = localRest;
+          }
+        } else {
+          restaurants.unshift(localRest);
+        }
+      });
+
+      saveRestaurantsLocally();
       renderAll();
+
+      return dbRows.length;
     }
 
     // =========================================================================
@@ -1816,6 +2383,542 @@
 
         // Center map to Gwanghwamun to see all markers of this category
         map.flyTo(GWANGHWAMUN_CENTER, 16);
+      });
+
+      // =========================================================================
+      // 11. SUPABASE AUTHENTICATION GATEWAY & SESSION MANAGEMENT
+      // =========================================================================
+      const authGateModal = document.getElementById('authGateModal');
+      const authAlertBox = document.getElementById('authAlertBox');
+      const userProfileSection = document.getElementById('userProfileSection');
+      const userEmailText = document.getElementById('userEmailText');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const authTabLogin = document.getElementById('authTabLogin');
+      const authTabSignup = document.getElementById('authTabSignup');
+      const authLoginForm = document.getElementById('authLoginForm');
+      const authSignupForm = document.getElementById('authSignupForm');
+
+      function showAuthAlert(msg, type = 'error') {
+        authAlertBox.classList.remove('hidden', 'bg-rose-50', 'text-rose-700', 'border-rose-200', 'bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+        if (type === 'success') {
+          authAlertBox.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+        } else {
+          authAlertBox.classList.add('bg-rose-50', 'text-rose-700', 'border-rose-200');
+        }
+        authAlertBox.textContent = msg;
+      }
+
+      function clearAuthAlert() {
+        authAlertBox.classList.add('hidden');
+        authAlertBox.textContent = '';
+      }
+
+      function setAuthState(user) {
+        currentAuthUser = user;
+        if (user) {
+          authGateModal.classList.add('hidden');
+          userEmailText.textContent = user.email || '인가된 사용자';
+          userProfileSection.classList.remove('hidden');
+          loadRestaurants();
+        } else {
+          authGateModal.classList.remove('hidden');
+          userEmailText.textContent = '로그인 필요';
+        }
+      }
+
+      // Tab Switching: Login vs Signup
+      authTabLogin.addEventListener('click', () => {
+        authTabLogin.className = "flex-1 py-3 text-center border-b-2 border-orange-500 text-orange-600 bg-white transition-all cursor-pointer font-bold";
+        authTabSignup.className = "flex-1 py-3 text-center border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all cursor-pointer font-bold";
+        authLoginForm.classList.remove('hidden');
+        authSignupForm.classList.add('hidden');
+        clearAuthAlert();
+      });
+
+      authTabSignup.addEventListener('click', () => {
+        authTabSignup.className = "flex-1 py-3 text-center border-b-2 border-orange-500 text-orange-600 bg-white transition-all cursor-pointer font-bold";
+        authTabLogin.className = "flex-1 py-3 text-center border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all cursor-pointer font-bold";
+        authSignupForm.classList.remove('hidden');
+        authLoginForm.classList.add('hidden');
+        clearAuthAlert();
+      });
+
+      // Login Form Submit with Supabase Auth v2
+      authLoginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearAuthAlert();
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+
+        if (!isSupabaseActive || !supabaseClient) {
+          showAuthAlert("Supabase 연동 정보가 설정되지 않았습니다. 아래 [Supabase 프로젝트 설정]에서 URL과 Anon Key를 입력하시거나, [테스트 계정으로 즉시 체험하기]를 이용하세요.");
+          return;
+        }
+
+        const loginBtn = document.getElementById('loginSubmitBtn');
+        const origText = loginBtn.innerHTML;
+        loginBtn.innerHTML = '<span>⏳ 인증 확인 중...</span>';
+        loginBtn.disabled = true;
+
+        try {
+          const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email,
+            password
+          });
+
+          if (error) {
+            showAuthAlert("로그인 실패: " + (error.message || "이메일 또는 비밀번호가 일치하지 않습니다."));
+          } else if (data && data.user) {
+            showAuthAlert("인증 성공! 접속합니다...", "success");
+            setTimeout(() => {
+              setAuthState(data.user);
+            }, 600);
+          }
+        } catch (err) {
+          showAuthAlert("로그인 중 예외 발생: " + err.message);
+        } finally {
+          loginBtn.innerHTML = origText;
+          loginBtn.disabled = false;
+        }
+      });
+
+      // Signup Form Submit with Supabase Auth v2
+      authSignupForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearAuthAlert();
+        const email = document.getElementById('signupEmail').value.trim();
+        const password = document.getElementById('signupPassword').value;
+        const confirm = document.getElementById('signupPasswordConfirm').value;
+
+        if (password !== confirm) {
+          showAuthAlert("비밀번호 확인이 일치하지 않습니다.");
+          return;
+        }
+
+        if (!isSupabaseActive || !supabaseClient) {
+          showAuthAlert("Supabase 연동 정보가 설정되지 않았습니다. 아래 [Supabase 프로젝트 설정]에서 프로젝트 정보를 먼저 입력하세요.");
+          return;
+        }
+
+        const signupBtn = document.getElementById('signupSubmitBtn');
+        const origText = signupBtn.innerHTML;
+        signupBtn.innerHTML = '<span>⏳ 가입 처리 중...</span>';
+        signupBtn.disabled = true;
+
+        try {
+          const { data, error } = await supabaseClient.auth.signUp({
+            email,
+            password
+          });
+
+          if (error) {
+            showAuthAlert("회원가입 실패: " + error.message);
+          } else if (data) {
+            if (data.session) {
+              showAuthAlert("회원가입 및 인가 로그인 완료!", "success");
+              setTimeout(() => {
+                setAuthState(data.user);
+              }, 600);
+            } else {
+              showAuthAlert("가입 확인 이메일이 발송되었습니다. 메일함의 링크를 클릭 후 로그인해 주세요.", "success");
+              authTabLogin.click();
+            }
+          }
+        } catch (err) {
+          showAuthAlert("회원가입 중 예외 발생: " + err.message);
+        } finally {
+          signupBtn.innerHTML = origText;
+          signupBtn.disabled = false;
+        }
+      });
+
+      // Guest / Test Demo Login
+      document.getElementById('guestDemoBtn').addEventListener('click', () => {
+        const demoUser = {
+          id: 'ghm-guest-' + Math.random().toString(36).substring(2, 8),
+          email: 'guest@gwanghwamun.kr'
+        };
+        localStorage.setItem('ghm_demo_auth_user', JSON.stringify(demoUser));
+        setAuthState(demoUser);
+        alert('테스트 게스트 계정으로 인가되었습니다. Supabase 연결 설정 시 클라우드 DB와 실시간 동기화됩니다.');
+      });
+
+      // Logout Handler
+      logoutBtn.addEventListener('click', async () => {
+        if (confirm('로그아웃 하시겠습니까?')) {
+          if (isSupabaseActive && supabaseClient) {
+            try {
+              await supabaseClient.auth.signOut();
+            } catch (e) {}
+          }
+          localStorage.removeItem('ghm_demo_auth_user');
+          setAuthState(null);
+          clearAuthAlert();
+        }
+      });
+
+      // Toggle Supabase Project Config Panel
+      const toggleConfigBtn = document.getElementById('toggleSupabaseConfigBtn');
+      const configPanel = document.getElementById('supabaseConfigPanel');
+      const configArrow = document.getElementById('configToggleArrow');
+      const cfgUrlInput = document.getElementById('cfgSupabaseUrl');
+      const cfgKeyInput = document.getElementById('cfgSupabaseAnonKey');
+
+      cfgUrlInput.value = SUPABASE_URL;
+      cfgKeyInput.value = SUPABASE_ANON_KEY;
+
+      toggleConfigBtn.addEventListener('click', () => {
+        const isHidden = configPanel.classList.toggle('hidden');
+        configArrow.textContent = isHidden ? '▼' : '▲';
+      });
+
+      document.getElementById('saveSupabaseConfigBtn').addEventListener('click', async () => {
+        const url = cfgUrlInput.value.trim();
+        const key = cfgKeyInput.value.trim();
+        if (!url || !key) {
+          alert('Supabase Project URL과 Anon Key를 모두 입력해 주세요.');
+          return;
+        }
+        localStorage.setItem('supabase_url', url);
+        localStorage.setItem('supabase_anon_key', key);
+        SUPABASE_URL = url;
+        SUPABASE_ANON_KEY = key;
+
+        initSupabaseClient();
+        clearAuthAlert();
+        showAuthAlert("Supabase 연결 설정이 저장되었습니다. 이제 계정으로 로그인해 주세요!", "success");
+      });
+
+      document.getElementById('openSqlFromConfigBtn').addEventListener('click', () => {
+        document.getElementById('sqlModal').classList.remove('hidden');
+      });
+
+      // Check Active Session on startup
+      async function checkInitialAuth() {
+        initSupabaseClient();
+
+        if (isSupabaseActive && supabaseClient) {
+          try {
+            const { data: { session }, error } = await supabaseClient.auth.getSession();
+            if (session && session.user) {
+              setAuthState(session.user);
+            } else {
+              setAuthState(null);
+            }
+
+            // Listen to auth state changes in Supabase v2
+            supabaseClient.auth.onAuthStateChange((event, session) => {
+              console.log("Supabase Auth 상태 변경:", event);
+              if (session && session.user) {
+                setAuthState(session.user);
+              } else {
+                setAuthState(null);
+              }
+            });
+            return;
+          } catch (e) {
+            console.warn("Supabase 세션 검사 실패:", e);
+          }
+        }
+
+        // Fallback: Check local demo user
+        const savedDemo = localStorage.getItem('ghm_demo_auth_user');
+        if (savedDemo) {
+          try {
+            setAuthState(JSON.parse(savedDemo));
+            return;
+          } catch (e) {}
+        }
+
+        // Otherwise, enforce authentication gate
+        setAuthState(null);
+      }
+
+      checkInitialAuth();
+
+      // =========================================================================
+      // 12. CSV BATCH IMPORT & SUPABASE ACCUMULATION HANDLERS
+      // =========================================================================
+      const csvModal = document.getElementById('csvModal');
+      const csvFileInput = document.getElementById('csvFileInput');
+      const csvDropZone = document.getElementById('csvDropZone');
+      const csvPreviewSection = document.getElementById('csvPreviewSection');
+      const csvPreviewTableBody = document.getElementById('csvPreviewTableBody');
+      const parsedRowCountEl = document.getElementById('parsedRowCount');
+      const csvAlertBox = document.getElementById('csvAlertBox');
+      const saveCsvToSupabaseBtn = document.getElementById('saveCsvToSupabaseBtn');
+      const saveCsvBtnText = document.getElementById('saveCsvBtnText');
+
+      let parsedCsvRows = [];
+
+      function showCsvAlert(msg, type = 'error') {
+        csvAlertBox.classList.remove('hidden', 'bg-rose-50', 'text-rose-700', 'border-rose-200', 'bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+        if (type === 'success') {
+          csvAlertBox.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+        } else {
+          csvAlertBox.classList.add('bg-rose-50', 'text-rose-700', 'border-rose-200');
+        }
+        csvAlertBox.textContent = msg;
+      }
+
+      function renderCsvPreview(rows) {
+        parsedCsvRows = rows;
+        parsedRowCountEl.textContent = rows.length;
+
+        csvPreviewTableBody.innerHTML = rows.slice(0, 8).map(row => {
+          const name = row.name || row['식당명'] || row['이름'] || '-';
+          const cat = row.category || row['카테고리'] || row['음식종류'] || '-';
+          const menu = row.signatureMenu || row['signature_menu'] || row['대표메뉴'] || '-';
+          const price = row.price || row['가격'] || '-';
+          const rating = row.rating || row['평점'] || '4.5';
+          const addr = row.address || row['주소'] || '광화문 인근';
+
+          return `
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="p-2 font-bold text-slate-900">${name}</td>
+              <td class="p-2 text-slate-600">${cat}</td>
+              <td class="p-2 text-slate-600 truncate max-w-[120px]">${menu}</td>
+              <td class="p-2 text-slate-800 font-semibold">${Number(price).toLocaleString()}원</td>
+              <td class="p-2 text-amber-600 font-bold">★ ${rating}</td>
+              <td class="p-2 text-slate-500 truncate max-w-[140px]">${addr}</td>
+            </tr>
+          `;
+        }).join('');
+
+        if (rows.length > 8) {
+          csvPreviewTableBody.innerHTML += `
+            <tr class="bg-slate-50 text-slate-500 italic">
+              <td colspan="6" class="p-2 text-center text-xs">... 외 ${rows.length - 8}개 식당 데이터 추가 포함</td>
+            </tr>
+          `;
+        }
+
+        csvPreviewSection.classList.remove('hidden');
+      }
+
+      function handleCsvFile(file) {
+        if (!file) return;
+        if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
+          showCsvAlert('CSV(.csv) 형식의 파일만 업로드할 수 있습니다.');
+          return;
+        }
+
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          dynamicTyping: true,
+          complete: function(results) {
+            if (results.errors && results.errors.length > 0) {
+              console.warn("CSV 파싱 경고:", results.errors);
+            }
+            if (!results.data || results.data.length === 0) {
+              showCsvAlert('CSV 파일 내에 데이터가 존재하지 않습니다.');
+              return;
+            }
+            showCsvAlert(`CSV 파일이 성공적으로 파싱되었습니다. 총 ${results.data.length}개 식당 데이터 확인됨.`, 'success');
+            renderCsvPreview(results.data);
+          },
+          error: function(err) {
+            showCsvAlert('CSV 파싱 오류: ' + err.message);
+          }
+        });
+      }
+
+      document.getElementById('openCsvModalBtn').addEventListener('click', () => {
+        csvModal.classList.remove('hidden');
+        csvAlertBox.classList.add('hidden');
+      });
+
+      document.getElementById('closeCsvModalBtn').addEventListener('click', () => {
+        csvModal.classList.add('hidden');
+      });
+
+      csvDropZone.addEventListener('click', () => csvFileInput.click());
+
+      csvFileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleCsvFile(e.target.files[0]);
+        }
+      });
+
+      csvDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        csvDropZone.classList.add('border-orange-500', 'bg-orange-50');
+      });
+
+      csvDropZone.addEventListener('dragleave', () => {
+        csvDropZone.classList.remove('border-orange-500', 'bg-orange-50');
+      });
+
+      csvDropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        csvDropZone.classList.remove('border-orange-500', 'bg-orange-50');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleCsvFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      // Sample CSV Template Download Button
+      document.getElementById('downloadSampleCsvBtn').addEventListener('click', () => {
+        const sampleData = [
+          {
+            name: "광화문 미진",
+            category: "한식",
+            signatureMenu: "냉메밀 (판메밀 2판) & 보쌈",
+            price: 11000,
+            rating: 4.8,
+            address: "서울 종로구 종로 19 르메이에르 1층",
+            lat: 37.5709,
+            lng: 126.9793,
+            author: "광화문직장인",
+            comment: "미쉐린 가이드 빕구르망 대표 메밀국수 맛집"
+          },
+          {
+            name: "후니도니",
+            category: "일식",
+            signatureMenu: "치즈 돈까스 & 미니 냉모밀",
+            price: 10000,
+            rating: 4.8,
+            address: "서울 종로구 종로 19 지하 1층",
+            lat: 37.5707,
+            lng: 126.9791,
+            author: "돈까스러버",
+            comment: "치즈가 듬뿍 들어간 광화문 직장인 최애 돈까스"
+          },
+          {
+            name: "동성각",
+            category: "중식",
+            signatureMenu: "간짜장 & 삼선짬뽕",
+            price: 7500,
+            rating: 4.6,
+            address: "서울 종로구 새문안로5가길 11",
+            lat: 37.5721,
+            lng: 126.9742,
+            author: "가성비왕",
+            comment: "7500원에 즐기는 불맛 가득한 노포 짜장면"
+          }
+        ];
+
+        const csvContent = Papa.unparse(sampleData);
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gwanghwamun_restaurants_sample.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      // Built-in 20 Restaurants Preset Load
+      document.getElementById('loadPresetCsvBtn').addEventListener('click', () => {
+        const presetCsvFormatted = REAL_GWANGHWAMUN_RESTAURANTS.map(r => ({
+          name: r.name,
+          category: r.category,
+          signatureMenu: r.signatureMenu,
+          price: r.price,
+          rating: r.rating,
+          address: r.address,
+          lat: r.lat,
+          lng: r.lng,
+          author: r.author,
+          comment: r.reviews?.[0]?.comment || ''
+        }));
+        renderCsvPreview(presetCsvFormatted);
+        showCsvAlert(`광화문 엄선 실존 맛집 20곳이 로드되었습니다. [Supabase DB에 누적 저장] 버튼을 누르면 DB에 일괄 적재됩니다!`, 'success');
+      });
+
+      // Upload / Accumulate CSV to Supabase
+      saveCsvToSupabaseBtn.addEventListener('click', async () => {
+        if (!parsedCsvRows || parsedCsvRows.length === 0) {
+          showCsvAlert('먼저 CSV 파일을 선택하거나 엄선 20곳 데이터를 로드해 주세요.');
+          return;
+        }
+
+        const upsert = document.getElementById('upsertConflictCheck').checked;
+        saveCsvBtnText.textContent = 'Supabase 적재 처리 중...';
+        saveCsvToSupabaseBtn.disabled = true;
+
+        try {
+          const count = await accumulateCsvRowsToSupabase(parsedCsvRows, upsert);
+          showCsvAlert(`🎉 총 ${count}건의 맛집 데이터가 Supabase DB에 성공적으로 누적 적재되었습니다!`, 'success');
+          setTimeout(() => {
+            csvModal.classList.add('hidden');
+          }, 1500);
+        } catch (err) {
+          showCsvAlert('누적 저장 오류: ' + err.message);
+        } finally {
+          saveCsvBtnText.textContent = 'Supabase DB에 누적 저장';
+          saveCsvToSupabaseBtn.disabled = false;
+        }
+      });
+
+      // Export Current Restaurants to CSV
+      document.getElementById('exportCurrentCsvBtn').addEventListener('click', () => {
+        if (!restaurants || restaurants.length === 0) {
+          alert('내보낼 맛집 데이터가 없습니다.');
+          return;
+        }
+
+        const exportData = restaurants.map(r => ({
+          id: r.id,
+          name: r.name,
+          category: r.category,
+          signatureMenu: r.signatureMenu,
+          price: r.price,
+          rating: r.rating,
+          likes: r.likes,
+          address: r.address,
+          lat: r.lat,
+          lng: r.lng,
+          author: r.author,
+          createdAt: r.createdAt,
+          comment: r.reviews?.[0]?.comment || ''
+        }));
+
+        const csvContent = Papa.unparse(exportData);
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `gwanghwamun_restaurants_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      // =========================================================================
+      // 13. SUPABASE SQL SCHEMA & RLS MODAL HANDLERS
+      // =========================================================================
+      const sqlModal = document.getElementById('sqlModal');
+      document.getElementById('openSqlModalBtn').addEventListener('click', () => {
+        sqlModal.classList.remove('hidden');
+      });
+
+      document.getElementById('closeSqlModalBtn').addEventListener('click', () => {
+        sqlModal.classList.add('hidden');
+      });
+
+      document.getElementById('copySqlBtn').addEventListener('click', async () => {
+        const sqlText = document.getElementById('sqlCodeContent').innerText;
+        try {
+          await navigator.clipboard.writeText(sqlText);
+          const copyIcon = document.getElementById('copySqlIcon');
+          const copyText = document.getElementById('copySqlText');
+          copyIcon.textContent = '✅';
+          copyText.textContent = '복사 완료!';
+          setTimeout(() => {
+            copyIcon.textContent = '📋';
+            copyText.textContent = '전체 SQL 복사';
+          }, 2000);
+        } catch (e) {
+          // Fallback
+          const ta = document.createElement('textarea');
+          ta.value = sqlText;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          alert('SQL이 클립보드에 복사되었습니다.');
+        }
       });
 
       // Initial Wheel Draw
